@@ -36,6 +36,30 @@ Running the app needs the Electron ABI (`rebuild:electron`); running smoke tests
 under plain Node/tsx needs the Node ABI (`rebuild:node`). Switching between the
 two requires re-running the matching rebuild. See README "Native modules & ABI".
 
+**GitHub auth to push from a new machine.** Pushing must authenticate as the
+repo owner (`xOAviOx`). If a machine already has a *different* GitHub login
+cached (macOS stores it in Keychain via the `osxkeychain` credential helper),
+pushes 403 with "Permission to xOAviOx/maestro denied to <other-user>". To fix:
+
+```bash
+# 1. Clear any stale github.com credential (macOS Keychain)
+printf "protocol=https\nhost=github.com\n\n" | git credential-osxkeychain erase
+
+# 2. Create a token on github.com as xOAviOx:
+#    classic token  -> needs the `repo` scope
+#    fine-grained   -> needs Contents: Read & write on the maestro repo
+#    (a fine-grained token missing Contents:write authenticates but still 403s)
+
+# 3. Save it so future pushes are automatic (macOS):
+printf "protocol=https\nhost=github.com\nusername=xOAviOx\npassword=<TOKEN>\n\n" \
+  | git credential-osxkeychain store
+```
+
+On Linux/Windows the helper differs (`store`/`cache` or Git Credential Manager),
+but the steps are the same: clear stale creds, then save a `xOAviOx` PAT. SSH
+(`git@github.com:xOAviOx/maestro.git` with a registered key) avoids tokens
+entirely and is the cleanest option if you set up keys on the new machine.
+
 ---
 
 ## Architecture (where things live)
@@ -114,6 +138,17 @@ maestro/
       the CLI (OS keychain / dotfiles); nothing is injected into agent env.
       `CodexHarness.isAvailable()` is now real (binary check) so the panel
       reflects Codex truthfully; its `run()` is still a stub. Smoke: `smoke:m7`.
+- [x] **Module 7b — Headless/CI token fallback (opt-in).** An "Advanced" section
+      per agent in the Accounts panel accepts a pasted token/API key for machines
+      that can't run interactive OAuth. Stored encrypted via Electron
+      `safeStorage` (OS keychain) in the `agent_credentials` table — `CredentialStore`
+      keeps the secret **write-only** (set/clear from the UI; never returned to the
+      renderer) and the engine stays Electron-free via an injected `SecretCipher`
+      (smoke tests pass a fake cipher; a NULL cipher refuses to persist plaintext).
+      At spawn the supervisor injects the decrypted secret as the right env var
+      (`CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) on top of
+      the inherited env. CLI login remains the recommended default. Smoke: `smoke:m7`
+      (encrypt-at-rest + reveal + clear + locked-cipher refusal).
 
 ---
 
@@ -126,10 +161,6 @@ maestro/
       are stubs — flesh out when those CLIs are targeted. Pattern: implement the
       `Harness` interface + a stream mapper like `ClaudeStreamMapper`. (Install +
       login detection already works for Codex via Module 7's Accounts panel.)
-- [ ] **Headless/CI token fallback (optional).** Module 7 uses interactive CLI
-      login (best for Pro/Max subscriptions). A future Accounts option could let
-      headless machines paste a `claude setup-token` / `OPENAI_API_KEY` — but
-      that stores a secret, so it stays opt-in and out of the default path.
 - [ ] **Persisted PR/merge history & richer review UX** (nice-to-have): show prior
       merge outcomes / open PR links per workspace beyond the transient `ReviewBar`
       outcome banner.
