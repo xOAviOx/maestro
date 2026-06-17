@@ -1,5 +1,8 @@
 import { z } from 'zod'
 import {
+  AgentAuthStatusSchema,
+  AgentLoginStartResultSchema,
+  CredentialInfoSchema,
   ErrorPayloadSchema,
   FileDiffSchema,
   MergeResultSchema,
@@ -15,6 +18,10 @@ import {
   WorkspacePushEventSchema,
   WorkspaceSchema,
   type AgentType,
+  type AgentAuthStatus,
+  type AgentLoginStartResult,
+  type CredentialInfo,
+  type CredentialKind,
   type CreateWorkspaceInput,
   type FileDiff,
   type MaestroErrorCode,
@@ -136,6 +143,24 @@ export const ipc = {
     callVoid(window.maestro.cancelAgent(workspaceId)),
   isAgentAvailable: (agentType: AgentType): Promise<boolean> =>
     call(window.maestro.isAgentAvailable(agentType), z.boolean()),
+  getAgentAuthStatus: (agentType: AgentType): Promise<AgentAuthStatus> =>
+    call(window.maestro.getAgentAuthStatus(agentType), AgentAuthStatusSchema),
+  startAgentLogin: (
+    agentType: AgentType,
+    cols: number,
+    rows: number
+  ): Promise<AgentLoginStartResult> =>
+    call(window.maestro.startAgentLogin(agentType, cols, rows), AgentLoginStartResultSchema),
+  getCredentialInfo: (agentType: AgentType): Promise<CredentialInfo> =>
+    call(window.maestro.getCredentialInfo(agentType), CredentialInfoSchema),
+  setCredential: (
+    agentType: AgentType,
+    kind: CredentialKind,
+    secret: string
+  ): Promise<CredentialInfo> =>
+    call(window.maestro.setCredential(agentType, kind, secret), CredentialInfoSchema),
+  clearCredential: (agentType: AgentType): Promise<CredentialInfo> =>
+    call(window.maestro.clearCredential(agentType), CredentialInfoSchema),
   isGhAvailable: (): Promise<boolean> => call(window.maestro.isGhAvailable(), z.boolean()),
 
   // terminal

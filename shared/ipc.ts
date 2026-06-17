@@ -1,6 +1,9 @@
 import type {
+  AgentAuthStatus,
   AgentType,
   CreateWorkspaceInput,
+  CredentialInfo,
+  CredentialKind,
   FileDiff,
   MergeResult,
   PingResponse,
@@ -60,6 +63,11 @@ export const IpcChannels = {
   agentStart: 'maestro:agent:start',
   agentCancel: 'maestro:agent:cancel',
   agentIsAvailable: 'maestro:agent:isAvailable',
+  agentAuthStatus: 'maestro:agent:authStatus',
+  agentLoginStart: 'maestro:agent:loginStart',
+  agentCredentialInfo: 'maestro:agent:credentialInfo',
+  agentCredentialSet: 'maestro:agent:credentialSet',
+  agentCredentialClear: 'maestro:agent:credentialClear',
 
   // push channel (main -> renderer)
   workspaceEvent: 'maestro:workspace-event'
@@ -110,6 +118,26 @@ export interface MaestroApi {
   startAgent(workspaceId: string, prompt: string, model?: string): Promise<void>
   cancelAgent(workspaceId: string): Promise<void>
   isAgentAvailable(agentType: AgentType): Promise<boolean>
+  /** Detect whether an agent's CLI is installed and logged in. */
+  getAgentAuthStatus(agentType: AgentType): Promise<AgentAuthStatus>
+  /**
+   * Start the agent CLI's interactive login flow in a pty. Output streams over
+   * the terminal data/exit channels keyed by the returned `sessionKey`; bind an
+   * xterm to it (see onTerminalData/onTerminalExit) so the user can complete the
+   * CLI's own OAuth handshake. Resolves to the session key, or null if the CLI
+   * isn't installed.
+   */
+  startAgentLogin(
+    agentType: AgentType,
+    cols: number,
+    rows: number
+  ): Promise<{ sessionKey: string } | null>
+  /** Non-secret info about a stored headless credential (Advanced fallback). */
+  getCredentialInfo(agentType: AgentType): Promise<CredentialInfo>
+  /** Store an encrypted headless credential (write-only; never read back). */
+  setCredential(agentType: AgentType, kind: CredentialKind, secret: string): Promise<CredentialInfo>
+  /** Remove a stored headless credential. */
+  clearCredential(agentType: AgentType): Promise<CredentialInfo>
 
   // --- integrations ---
   isGhAvailable(): Promise<boolean>

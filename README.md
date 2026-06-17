@@ -10,13 +10,30 @@ helps ship it.
 
 ## Status
 
-All modules (0–6 + 4b) are built and verified: scaffold, orchestration engine,
-harness layer (Claude Code), workspace supervisor, UI shell, Monaco diff viewer,
-merge/PR/archive, and a raw terminal per workspace (node-pty + xterm).
+All modules (0–6 + 4b + 7) are built and verified: scaffold, orchestration
+engine, harness layer (Claude Code), workspace supervisor, UI shell, Monaco diff
+viewer, merge/PR/archive, a raw terminal per workspace (node-pty + xterm), and
+agent accounts (CLI login from Settings → Accounts).
 
-Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m6` plus
+Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m7` plus
 `smoke:m4b` (run `npm run rebuild:node` first — see ABI note below; `smoke:m4b`
-works on either ABI since node-pty ships N-API prebuilds).
+and `smoke:m7` work on either ABI — node-pty ships N-API prebuilds and the auth
+probes don't touch the DB).
+
+## Agent accounts (login)
+
+Maestro runs each agent through its **own CLI login** — your Claude Pro/Max or
+ChatGPT subscription stays with the provider and **no tokens are stored in
+Maestro**. Open **Settings → Accounts** (gear button in the sidebar) to:
+
+- See whether each agent CLI is **installed** and **logged in**
+  (`claude auth status`, `codex login status`).
+- Click **Log in** to run the CLI's own sign-in flow (`claude auth login`,
+  `codex login`) in an embedded terminal; it may open your browser to finish
+  OAuth. Status re-checks automatically when the flow ends.
+
+Credentials are owned by each CLI (OS keychain / dotfiles); Maestro only detects
+login state and never injects tokens into the agent's environment.
 
 ## Native modules & ABI (important for dev)
 

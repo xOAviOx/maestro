@@ -50,8 +50,11 @@ type ChildProc = execa.ExecaChildProcess<string>
  * for true streaming multi-turn. We choose one-shot + `--resume` for the MVP:
  * it is simpler and more robust to supervise (each turn is a clean process).
  *
- * Auth: none is passed — Claude Code uses the user's existing login. Never
- * inject tokens.
+ * Auth: by default none is passed — Claude Code uses the user's existing login
+ * (the recommended path). The supervisor may optionally pass `opts.env` carrying
+ * a user-configured headless credential (e.g. CLAUDE_CODE_OAUTH_TOKEN) for CI /
+ * non-interactive machines; it is merged on top of the inherited env and never
+ * logged. We never synthesize or guess tokens.
  */
 export class ClaudeCodeHarness implements Harness {
   readonly type = 'claude-code' as const
@@ -110,7 +113,9 @@ export class ClaudeCodeHarness implements Harness {
       cwd: opts.worktreePath,
       // Ignore stdin so the CLI doesn't wait ~3s for piped input in one-shot mode.
       stdin: 'ignore',
-      env: { ...process.env },
+      // Inherit the user's env (so the CLI's own login works), then layer any
+      // explicitly-provided credential env on top.
+      env: { ...process.env, ...(opts.env ?? {}) },
       windowsHide: true,
       encoding: 'utf8',
       buffer: false, // we stream stdout ourselves

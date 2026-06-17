@@ -2,6 +2,7 @@ import { BrowserWindow, dialog, ipcMain } from 'electron'
 import { IpcChannels } from '@shared/ipc'
 import {
   AgentAvailabilityInputSchema,
+  AgentLoginInputSchema,
   ArchiveWorkspaceInputSchema,
   CommitWorkspaceInputSchema,
   CreatePrInputSchema,
@@ -11,6 +12,7 @@ import {
   PingRequestSchema,
   RegisterRepoInputSchema,
   RepoPathInputSchema,
+  SetCredentialInputSchema,
   SetFilesToCopyInputSchema,
   StartAgentInputSchema,
   TerminalInputSchema,
@@ -21,6 +23,8 @@ import {
   type TerminalStartResult
 } from '@shared/types'
 import { toErrorPayload } from '../engine/errors'
+import { getAgentAuthStatus, resolveLoginCommand } from '../harness'
+import { maestroHome } from '../engine/util/paths'
 import type { Engine } from '../engine'
 import type { WorkspaceSupervisor } from '../engine/WorkspaceSupervisor'
 import type { PtyManager } from '../terminal/PtyManager'
@@ -156,6 +160,39 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   handle(IpcChannels.agentIsAvailable, (raw) => {
     const { agentType } = AgentAvailabilityInputSchema.parse(raw)
     return supervisor.isAgentAvailable(agentType)
+  })
+  handle(IpcChannels.agentAuthStatus, (raw) => {
+    const { agentType } = AgentAvailabilityInputSchema.parse(raw)
+    return getAgentAuthStatus(agentType)
+  })
+  handle(
+    IpcChannels.agentLoginStart,
+    async (raw): Promise<{ sessionKey: string } | null> => {
+      const { agentType, cols, rows } = AgentLoginInputSchema.parse(raw)
+      const cmd = await resolveLoginCommand(agentType)
+      if (!cmd) return null
+      // Reserved key namespace so a login pty can never collide with a
+      // workspace shell (workspace keys are uuids). The renderer binds an xterm
+      // to this key via the terminal data/exit channels.
+      const sessionKey = `login:${agentType}`
+      // Run the login flow from the Maestro data dir (a stable, writable cwd).
+      ptyManager.startCommand(sessionKey, cmd.file, cmd.args, maestroHome(), cols, rows)
+      return { sessionKey }
+    }
+  )
+  handle(IpcChannels.agentCredentialInfo, (raw) => {
+    const { agentType } = AgentAvailabilityInputSchema.parse(raw)
+    return engine.credentials.info(agentType)
+  })
+  handle(IpcChannels.agentCredentialSet, (raw) => {
+    const { agentType, kind, secret } = SetCredentialInputSchema.parse(raw)
+    engine.credentials.set(agentType, kind, secret)
+    return engine.credentials.info(agentType)
+  })
+  handle(IpcChannels.agentCredentialClear, (raw) => {
+    const { agentType } = AgentAvailabilityInputSchema.parse(raw)
+    engine.credentials.clear(agentType)
+    return engine.credentials.info(agentType)
   })
 
   // --- terminal (node-pty) ---

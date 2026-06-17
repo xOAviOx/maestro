@@ -1,8 +1,9 @@
 import { createHarness, type ClaudeCodeHarnessOptions, type Harness } from '../harness'
+import { credentialEnvVar } from '../harness'
 import { log } from '../log'
 import { MaestroError, toMaestroError } from './errors'
 import type { Engine } from './index'
-import type { WorkspacePushEvent, WorkspaceStatus } from '@shared/types'
+import type { AgentType, WorkspacePushEvent, WorkspaceStatus } from '@shared/types'
 
 /** A push-event listener (the IPC layer subscribes one that broadcasts to windows). */
 export type SupervisorListener = (evt: WorkspacePushEvent) => void
@@ -74,8 +75,24 @@ export class WorkspaceSupervisor {
     this.active.set(workspaceId, { harness, startedAt: new Date().toISOString() })
     this.setStatus(workspaceId, 'running')
 
+    const env = this.credentialEnv(ws.agentType)
+
     // Fire-and-forget: each concurrent run is fully independent.
-    void this.runLoop(workspaceId, ws.worktreePath, ws.sessionId, harness, prompt, model)
+    void this.runLoop(workspaceId, ws.worktreePath, ws.sessionId, harness, prompt, model, env)
+  }
+
+  /**
+   * Build the optional credential env for an agent from the (opt-in) stored
+   * headless credential. Returns undefined when nothing is configured, so the
+   * common case relies purely on the CLI's own login. The secret is read only
+   * here, at spawn time, and never logged.
+   */
+  private credentialEnv(agentType: AgentType): Record<string, string> | undefined {
+    const cred = this.engine.credentials.reveal(agentType)
+    if (!cred) return undefined
+    const varName = credentialEnvVar(agentType, cred.kind)
+    if (!varName) return undefined
+    return { [varName]: cred.secret }
   }
 
   private async runLoop(
@@ -84,7 +101,8 @@ export class WorkspaceSupervisor {
     resumeSessionId: string | null,
     harness: Harness,
     prompt: string,
-    model?: string
+    model?: string,
+    env?: Record<string, string>
   ): Promise<void> {
     try {
       const { sessionId } = await harness.run(
@@ -92,6 +110,7 @@ export class WorkspaceSupervisor {
           worktreePath,
           prompt,
           ...(model ? { model } : {}),
+          ...(env ? { env } : {}),
           resumeSessionId
         },
         (event) => this.emit({ type: 'agent_event', workspaceId, event })

@@ -12,7 +12,7 @@ const AGENT_LABELS: Record<AgentType, string> = {
 export function NewWorkspaceDialog({ onClose }: { onClose: () => void }): JSX.Element {
   const repoInfo = useStore((s) => s.repoInfo)
   const createWorkspace = useStore((s) => s.createWorkspace)
-  const claudeAvailable = useStore((s) => s.claudeAvailable)
+  const claudeAuth = useStore((s) => s.agentAuth['claude-code'])
   const loading = useStore((s) => s.loading)
 
   const [name, setName] = useState('')
@@ -72,9 +72,15 @@ export function NewWorkspaceDialog({ onClose }: { onClose: () => void }): JSX.El
             </option>
           ))}
         </select>
-        {!claudeAvailable && (
+        {!claudeAuth.installed && (
           <p className="mb-2 text-xs text-status-error">
             Claude Code CLI not found on PATH — agents won&apos;t run until it&apos;s installed.
+          </p>
+        )}
+        {claudeAuth.installed && !claudeAuth.loggedIn && (
+          <p className="mb-2 text-xs text-amber-400">
+            Claude Code isn&apos;t logged in — open Settings → Accounts to sign in before running an
+            agent.
           </p>
         )}
 

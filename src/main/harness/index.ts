@@ -30,3 +30,12 @@ export { ClaudeCodeHarness } from './ClaudeCodeHarness'
 export type { ClaudeCodeHarnessOptions, ClaudePermissionMode } from './ClaudeCodeHarness'
 export { CodexHarness } from './CodexHarness'
 export { CursorHarness } from './CursorHarness'
+export {
+  getAgentAuthStatus,
+  getClaudeAuthStatus,
+  getCodexAuthStatus,
+  resolveLoginCommand,
+  credentialEnvVar
+} from './authStatus'
+export type { LoginCommand } from './authStatus'
+export { resolveClaudeBinary, resolveCodexBinary } from './resolveBinary'

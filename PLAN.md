@@ -102,6 +102,18 @@ maestro/
       shell in the workspace's worktree via `node-pty`; `TerminalView` (renderer)
       renders it with xterm.js, wired through dedicated IPC channels. node-pty
       ships N-API prebuilds, so it needs no per-ABI rebuild. Smoke: `smoke:m4b`.
+- [x] **Module 7 — Agent accounts (login).** Detect each agent CLI's install +
+      login state and let the user sign in from within Maestro, without ever
+      reading or storing tokens. `harness/authStatus.ts` probes each CLI's own
+      status command (`claude auth status --json`, `codex login status`) and
+      resolves its login command (`claude auth login`, `codex login`).
+      `PtyManager.startCommand` runs that login flow in a pty so the user
+      completes the CLI's OAuth handshake; the renderer binds an xterm to it
+      (`LoginTerminal`) inside a Settings → Accounts panel (`SettingsDialog`,
+      opened from the sidebar). Auth is detected only — credentials stay owned by
+      the CLI (OS keychain / dotfiles); nothing is injected into agent env.
+      `CodexHarness.isAvailable()` is now real (binary check) so the panel
+      reflects Codex truthfully; its `run()` is still a stub. Smoke: `smoke:m7`.
 
 ---
 
@@ -110,9 +122,14 @@ maestro/
 - [ ] **macOS signed build.** `electron-builder.yml` has a stubbed mac/`dmg`
       target. Needs a Mac CI runner + signing/notarization. Develop & package on
       Windows first (current target), add mac as a later CI step.
-- [ ] **Additional agent harnesses.** `CodexHarness` / `CursorHarness` are stubs
-      — flesh out when those CLIs are targeted. Pattern: implement the `Harness`
-      interface + a stream mapper like `ClaudeStreamMapper`.
+- [ ] **Additional agent harnesses.** `CodexHarness` / `CursorHarness` `run()`
+      are stubs — flesh out when those CLIs are targeted. Pattern: implement the
+      `Harness` interface + a stream mapper like `ClaudeStreamMapper`. (Install +
+      login detection already works for Codex via Module 7's Accounts panel.)
+- [ ] **Headless/CI token fallback (optional).** Module 7 uses interactive CLI
+      login (best for Pro/Max subscriptions). A future Accounts option could let
+      headless machines paste a `claude setup-token` / `OPENAI_API_KEY` — but
+      that stores a secret, so it stays opt-in and out of the default path.
 - [ ] **Persisted PR/merge history & richer review UX** (nice-to-have): show prior
       merge outcomes / open PR links per workspace beyond the transient `ReviewBar`
       outcome banner.

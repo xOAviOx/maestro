@@ -1,7 +1,7 @@
-import { app, BrowserWindow, shell, webContents } from 'electron'
+import { app, BrowserWindow, safeStorage, shell, webContents } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
-import { createEngine, type Engine } from './engine'
+import { createEngine, type Engine, type SecretCipher } from './engine'
 import { WorkspaceSupervisor } from './engine/WorkspaceSupervisor'
 import { PtyManager } from './terminal/PtyManager'
 import { IpcChannels } from '@shared/ipc'
@@ -71,9 +71,23 @@ function broadcast(evt: WorkspacePushEvent): void {
   sendToAll(IpcChannels.workspaceEvent, evt)
 }
 
+/**
+ * OS-keychain-backed cipher for stored credentials, via Electron safeStorage.
+ * Encryption is unavailable until the app is ready and on some Linux setups
+ * without a configured keyring; the CredentialStore refuses to persist plaintext
+ * when isAvailable() is false.
+ */
+function electronCipher(): SecretCipher {
+  return {
+    isAvailable: () => safeStorage.isEncryptionAvailable(),
+    encrypt: (plaintext) => safeStorage.encryptString(plaintext),
+    decrypt: (ciphertext) => safeStorage.decryptString(ciphertext)
+  }
+}
+
 app.whenReady().then(() => {
   // Engine + supervisor live for the app's lifetime.
-  engine = createEngine()
+  engine = createEngine({ cipher: electronCipher() })
   supervisor = new WorkspaceSupervisor(engine)
   supervisor.subscribe(broadcast)
 

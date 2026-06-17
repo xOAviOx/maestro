@@ -3,6 +3,7 @@ import { IpcChannels } from '@shared/ipc'
 import type { MaestroApi } from '@shared/ipc'
 import type {
   AgentType,
+  CredentialKind,
   CreateWorkspaceInput,
   TerminalDataEvent,
   TerminalExitEvent,
@@ -59,6 +60,16 @@ const api: MaestroApi = {
     ipcRenderer.invoke(IpcChannels.agentCancel, { id: workspaceId }),
   isAgentAvailable: (agentType: AgentType) =>
     ipcRenderer.invoke(IpcChannels.agentIsAvailable, { agentType }),
+  getAgentAuthStatus: (agentType: AgentType) =>
+    ipcRenderer.invoke(IpcChannels.agentAuthStatus, { agentType }),
+  startAgentLogin: (agentType: AgentType, cols: number, rows: number) =>
+    ipcRenderer.invoke(IpcChannels.agentLoginStart, { agentType, cols, rows }),
+  getCredentialInfo: (agentType: AgentType) =>
+    ipcRenderer.invoke(IpcChannels.agentCredentialInfo, { agentType }),
+  setCredential: (agentType: AgentType, kind: CredentialKind, secret: string) =>
+    ipcRenderer.invoke(IpcChannels.agentCredentialSet, { agentType, kind, secret }),
+  clearCredential: (agentType: AgentType) =>
+    ipcRenderer.invoke(IpcChannels.agentCredentialClear, { agentType }),
 
   // integrations
   isGhAvailable: () => ipcRenderer.invoke(IpcChannels.ghAvailable),

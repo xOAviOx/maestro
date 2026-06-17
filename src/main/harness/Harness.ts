@@ -13,6 +13,12 @@ export interface LaunchOptions {
   model?: string
   /** When set, resume the agent's prior session (multi-turn continuity). */
   resumeSessionId?: string | null
+  /**
+   * Extra environment variables merged into the agent process at spawn time
+   * (e.g. an optional stored credential for headless machines). Applied on top
+   * of the inherited process env. Never logged.
+   */
+  env?: Record<string, string>
 }
 
 /**

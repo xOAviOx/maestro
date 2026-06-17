@@ -32,34 +32,63 @@ export class PtyManager {
   /** Start a shell for the workspace (or re-attach if one exists). Returns the
    * recent-output replay buffer. */
   start(workspaceId: string, worktreePath: string, cols: number, rows: number): string {
-    const existing = this.sessions.get(workspaceId)
+    const shell = defaultShell()
+    return this.spawn(workspaceId, shell.file, shell.args, worktreePath, cols, rows)
+  }
+
+  /**
+   * Start an explicit command in a pty under an arbitrary key (re-attaching if a
+   * session for that key is already running). Used for agent CLI login flows,
+   * which must run as a real interactive process — not the default shell — so the
+   * user can complete the CLI's own OAuth handshake. Output streams over the same
+   * data/exit sinks, tagged with `key`.
+   */
+  startCommand(
+    key: string,
+    file: string,
+    args: string[],
+    cwd: string,
+    cols: number,
+    rows: number
+  ): string {
+    return this.spawn(key, file, args, cwd, cols, rows)
+  }
+
+  private spawn(
+    key: string,
+    file: string,
+    args: string[],
+    cwd: string,
+    cols: number,
+    rows: number
+  ): string {
+    const existing = this.sessions.get(key)
     if (existing) {
       this.safeResize(existing.proc, cols, rows)
       return existing.buffer
     }
 
-    const shell = defaultShell()
-    const proc = pty.spawn(shell.file, shell.args, {
+    const proc = pty.spawn(file, args, {
       name: 'xterm-color',
       cols,
       rows,
-      cwd: worktreePath,
+      cwd,
       env: process.env as Record<string, string>
     })
 
     const session: Session = { proc, buffer: '' }
-    this.sessions.set(workspaceId, session)
+    this.sessions.set(key, session)
 
     proc.onData((data) => {
       session.buffer = (session.buffer + data).slice(-MAX_BUFFER_BYTES)
-      this.onData({ workspaceId, data })
+      this.onData({ workspaceId: key, data })
     })
     proc.onExit(({ exitCode }) => {
-      this.sessions.delete(workspaceId)
-      this.onExit({ workspaceId, exitCode })
+      this.sessions.delete(key)
+      this.onExit({ workspaceId: key, exitCode })
     })
 
-    log.info('terminal.started', { workspaceId, shell: shell.file })
+    log.info('terminal.started', { key, file })
     return ''
   }
 

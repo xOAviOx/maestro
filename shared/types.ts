@@ -276,6 +276,61 @@ export type RepoPathInput = z.infer<typeof RepoPathInputSchema>
 export const AgentAvailabilityInputSchema = z.object({ agentType: AgentTypeSchema })
 export type AgentAvailabilityInput = z.infer<typeof AgentAvailabilityInputSchema>
 
+/**
+ * Login state for one agent CLI, shown in the Accounts settings panel.
+ * `installed`: the CLI binary was found on PATH.
+ * `loggedIn`: the CLI reports an authenticated account (e.g. Claude Pro/Max via
+ *   `claude auth status`, Codex via `codex login status`). We only detect this —
+ *   credentials stay owned by the CLI; Maestro never reads or stores tokens.
+ */
+export const AgentAuthStatusSchema = z.object({
+  agentType: AgentTypeSchema,
+  installed: z.boolean(),
+  loggedIn: z.boolean()
+})
+export type AgentAuthStatus = z.infer<typeof AgentAuthStatusSchema>
+
+/** Start an agent CLI login flow in a pty of the given size. */
+export const AgentLoginInputSchema = z.object({
+  agentType: AgentTypeSchema,
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive()
+})
+export type AgentLoginInput = z.infer<typeof AgentLoginInputSchema>
+
+/** Result of starting a login pty: the key terminal events are tagged with. */
+export const AgentLoginStartResultSchema = z
+  .object({ sessionKey: z.string().min(1) })
+  .nullable()
+export type AgentLoginStartResult = z.infer<typeof AgentLoginStartResultSchema>
+
+/**
+ * Headless/CI credential fallback. Most users sign in via the agent CLI's own
+ * login; this is an opt-in "Advanced" path for machines that can't run an
+ * interactive OAuth flow. `kind` selects which env var the secret is injected
+ * as at spawn time (see CREDENTIAL_ENV_VARS in main). The secret value itself
+ * is write-only: it's stored encrypted and never read back to the renderer.
+ */
+export const CREDENTIAL_KINDS = ['oauth-token', 'api-key'] as const
+export const CredentialKindSchema = z.enum(CREDENTIAL_KINDS)
+export type CredentialKind = z.infer<typeof CredentialKindSchema>
+
+export const SetCredentialInputSchema = z.object({
+  agentType: AgentTypeSchema,
+  kind: CredentialKindSchema,
+  secret: z.string().min(1)
+})
+export type SetCredentialInput = z.infer<typeof SetCredentialInputSchema>
+
+/** Non-secret view of a stored credential, safe to send to the renderer. */
+export const CredentialInfoSchema = z.object({
+  agentType: AgentTypeSchema,
+  configured: z.boolean(),
+  kind: CredentialKindSchema.nullable(),
+  updatedAt: z.string().nullable()
+})
+export type CredentialInfo = z.infer<typeof CredentialInfoSchema>
+
 // ---------------------------------------------------------------------------
 // Module 6 — merge & review
 // ---------------------------------------------------------------------------

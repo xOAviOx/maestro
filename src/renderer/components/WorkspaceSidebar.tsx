@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { StatusDot } from './StatusDot'
 import { NewWorkspaceDialog } from './NewWorkspaceDialog'
+import { SettingsDialog } from './SettingsDialog'
 
 /** Left rail: repo picker + workspace list with live status dots. */
 export function WorkspaceSidebar(): JSX.Element {
@@ -9,16 +10,32 @@ export function WorkspaceSidebar(): JSX.Element {
   const activeRepoPath = useStore((s) => s.activeRepoPath)
   const workspaces = useStore((s) => s.workspaces)
   const selectedWorkspaceId = useStore((s) => s.selectedWorkspaceId)
+  const agentAuth = useStore((s) => s.agentAuth)
   const openRepo = useStore((s) => s.openRepo)
   const selectRepo = useStore((s) => s.selectRepo)
   const selectWorkspace = useStore((s) => s.selectWorkspace)
 
   const [showNew, setShowNew] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
+
+  const claude = agentAuth['claude-code']
+  const accountLabel = !claude.installed
+    ? 'Claude Code: not installed'
+    : claude.loggedIn
+      ? 'Claude Code: logged in'
+      : 'Claude Code: logged out'
 
   return (
     <aside className="flex h-full w-72 flex-col border-r border-slate-800 bg-slate-900/60">
       <div className="flex items-center justify-between px-4 py-3">
         <span className="text-sm font-semibold tracking-tight">Maestro</span>
+        <button
+          className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800"
+          onClick={() => setShowSettings(true)}
+          title="Settings & accounts"
+        >
+          ⚙ Settings
+        </button>
       </div>
 
       {/* Repo picker */}
@@ -86,7 +103,23 @@ export function WorkspaceSidebar(): JSX.Element {
         )}
       </div>
 
+      <div className="border-t border-slate-800 px-3 py-2">
+        <button
+          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-slate-400 hover:bg-slate-800/50"
+          onClick={() => setShowSettings(true)}
+          title="Manage agent accounts"
+        >
+          <span className="truncate">{accountLabel}</span>
+          <span
+            className={`ml-2 h-2 w-2 shrink-0 rounded-full ${
+              claude.loggedIn ? 'bg-emerald-400' : claude.installed ? 'bg-amber-400' : 'bg-slate-600'
+            }`}
+          />
+        </button>
+      </div>
+
       {showNew && <NewWorkspaceDialog onClose={() => setShowNew(false)} />}
+      {showSettings && <SettingsDialog onClose={() => setShowSettings(false)} />}
     </aside>
   )
 }

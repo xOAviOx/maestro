@@ -55,5 +55,16 @@ function migrate(db: Db): void {
       ON workspaces (repo_path, branch);
 
     CREATE INDEX IF NOT EXISTS idx_ws_repo ON workspaces (repo_path);
+
+    -- Optional headless/CI credential fallback: a single secret per agent type,
+    -- stored as ciphertext (Electron safeStorage / OS keychain). Plaintext never
+    -- touches disk and is never returned to the renderer. Most users rely on the
+    -- agent CLI's own login instead and never populate this table.
+    CREATE TABLE IF NOT EXISTS agent_credentials (
+      agent_type  TEXT PRIMARY KEY,
+      kind        TEXT NOT NULL,
+      ciphertext  BLOB NOT NULL,
+      updated_at  TEXT NOT NULL
+    );
   `)
 }

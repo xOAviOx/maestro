@@ -1,8 +1,11 @@
 import { create } from 'zustand'
 import { ipc, MaestroClientError } from './ipc'
 import type {
+  AgentAuthStatus,
   AgentEvent,
   AgentType,
+  CredentialInfo,
+  CredentialKind,
   RepoInfo,
   RepoRecord,
   Workspace,
@@ -46,6 +49,10 @@ interface MaestroState {
   chats: Record<string, ChatItem[]>
   claudeAvailable: boolean
   ghAvailable: boolean
+  /** Per-agent install + login state, shown in the Accounts settings panel. */
+  agentAuth: Record<AgentType, AgentAuthStatus>
+  /** Per-agent stored-credential metadata (Advanced headless fallback). */
+  agentCredentials: Record<AgentType, CredentialInfo>
 
   // ui
   loading: boolean
@@ -59,6 +66,9 @@ interface MaestroState {
   openRepo: () => Promise<void>
   selectRepo: (repoPath: string) => Promise<void>
   refreshWorkspaces: () => Promise<void>
+  refreshAgentAuth: () => Promise<void>
+  setCredential: (agentType: AgentType, kind: CredentialKind, secret: string) => Promise<void>
+  clearCredential: (agentType: AgentType) => Promise<void>
   createWorkspace: (name: string, baseBranch: string, agentType: AgentType) => Promise<void>
   selectWorkspace: (id: string) => void
   sendPrompt: (workspaceId: string, prompt: string) => Promise<void>
@@ -77,6 +87,16 @@ export const useStore = create<MaestroState>((set, get) => ({
   chats: {},
   claudeAvailable: false,
   ghAvailable: false,
+  agentAuth: {
+    'claude-code': { agentType: 'claude-code', installed: false, loggedIn: false },
+    codex: { agentType: 'codex', installed: false, loggedIn: false },
+    cursor: { agentType: 'cursor', installed: false, loggedIn: false }
+  },
+  agentCredentials: {
+    'claude-code': { agentType: 'claude-code', configured: false, kind: null, updatedAt: null },
+    codex: { agentType: 'codex', configured: false, kind: null, updatedAt: null },
+    cursor: { agentType: 'cursor', configured: false, kind: null, updatedAt: null }
+  },
 
   loading: false,
   error: null,
@@ -101,6 +121,8 @@ export const useStore = create<MaestroState>((set, get) => ({
     } catch (err) {
       set({ error: errMessage(err) })
     }
+    // Auth status is non-blocking and best-effort; never fail init over it.
+    void get().refreshAgentAuth()
   },
 
   openRepo: async () => {
@@ -161,6 +183,42 @@ export const useStore = create<MaestroState>((set, get) => ({
       set({ error: errMessage(err) })
     } finally {
       set({ loading: false })
+    }
+  },
+
+  refreshAgentAuth: async () => {
+    try {
+      const [claude, codex, claudeCred, codexCred] = await Promise.all([
+        ipc.getAgentAuthStatus('claude-code'),
+        ipc.getAgentAuthStatus('codex'),
+        ipc.getCredentialInfo('claude-code'),
+        ipc.getCredentialInfo('codex')
+      ])
+      set((s) => ({
+        agentAuth: { ...s.agentAuth, 'claude-code': claude, codex },
+        agentCredentials: { ...s.agentCredentials, 'claude-code': claudeCred, codex: codexCred },
+        claudeAvailable: claude.installed
+      }))
+    } catch (err) {
+      set({ error: errMessage(err) })
+    }
+  },
+
+  setCredential: async (agentType, kind, secret) => {
+    try {
+      const info = await ipc.setCredential(agentType, kind, secret)
+      set((s) => ({ agentCredentials: { ...s.agentCredentials, [agentType]: info } }))
+    } catch (err) {
+      set({ error: errMessage(err) })
+    }
+  },
+
+  clearCredential: async (agentType) => {
+    try {
+      const info = await ipc.clearCredential(agentType)
+      set((s) => ({ agentCredentials: { ...s.agentCredentials, [agentType]: info } }))
+    } catch (err) {
+      set({ error: errMessage(err) })
     }
   },
 
