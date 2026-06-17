@@ -3,5 +3,12 @@
   "references": [
     { "path": "./tsconfig.node.json" },
     { "path": "./tsconfig.web.json" }
-  ]
+  ],
+  "//": "compilerOptions here are NOT used by the referenced builds (files: []). They exist so tooling that reads the root tsconfig (tsx) can resolve the @shared alias when running test scripts.",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@shared/*": ["shared/*"]
+    }
+  }
 }

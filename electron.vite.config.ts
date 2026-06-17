@@ -8,7 +8,10 @@ const sharedAlias = { '@shared': resolve(__dirname, 'shared') }
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    // execa is ESM-only; a require() of it from the CJS main bundle would
+    // throw at runtime, so bundle it instead of externalizing. Native modules
+    // (better-sqlite3) must stay external — they cannot be bundled.
+    plugins: [externalizeDepsPlugin({ exclude: ['execa'] })],
     resolve: { alias: sharedAlias },
     build: {
       rollupOptions: {
