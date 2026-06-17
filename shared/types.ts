@@ -19,6 +19,9 @@ export const MAESTRO_ERROR_CODES = [
   'WORKSPACE_NOT_FOUND',
   'REPO_NOT_FOUND',
   'WORKSPACE_DIRTY',
+  'MERGE_CONFLICT',
+  'NOTHING_TO_MERGE',
+  'GH_UNAVAILABLE',
   'HARNESS_NOT_CONFIGURED',
   'HARNESS_UNAVAILABLE',
   'INTERNAL'
@@ -272,3 +275,57 @@ export type RepoPathInput = z.infer<typeof RepoPathInputSchema>
 
 export const AgentAvailabilityInputSchema = z.object({ agentType: AgentTypeSchema })
 export type AgentAvailabilityInput = z.infer<typeof AgentAvailabilityInputSchema>
+
+// ---------------------------------------------------------------------------
+// Module 6 — merge & review
+// ---------------------------------------------------------------------------
+
+/** Live review status for a workspace, shown in the ReviewBar. */
+export const ReviewStatusSchema = z.object({
+  /** Uncommitted (staged/unstaged) changes present in the worktree. */
+  hasUncommittedChanges: z.boolean(),
+  /** Number of changed files vs the base branch (committed + uncommitted). */
+  changedFileCount: z.number(),
+  /** True if base branch is checked out in a worktree (required for merge). */
+  baseCheckedOut: z.boolean(),
+  baseBranch: z.string()
+})
+export type ReviewStatus = z.infer<typeof ReviewStatusSchema>
+
+export const MergeResultSchema = z.object({
+  merged: z.boolean(),
+  /** Commit created in the worktree before merging, if changes were committed. */
+  committed: z.boolean(),
+  baseBranch: z.string(),
+  branch: z.string()
+})
+export type MergeResult = z.infer<typeof MergeResultSchema>
+
+export const PullRequestResultSchema = z.object({
+  url: z.string(),
+  committed: z.boolean()
+})
+export type PullRequestResult = z.infer<typeof PullRequestResultSchema>
+
+export const CommitWorkspaceInputSchema = z.object({
+  id: z.string().min(1),
+  message: z.string().min(1)
+})
+export type CommitWorkspaceInput = z.infer<typeof CommitWorkspaceInputSchema>
+
+export const MergeWorkspaceInputSchema = z.object({
+  id: z.string().min(1),
+  /** Commit message for any uncommitted changes (defaults applied if omitted). */
+  commitMessage: z.string().optional(),
+  /** Archive (remove worktree) after a successful merge. */
+  archiveAfter: z.boolean().optional()
+})
+export type MergeWorkspaceInput = z.infer<typeof MergeWorkspaceInputSchema>
+
+export const CreatePrInputSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().optional(),
+  body: z.string().optional(),
+  commitMessage: z.string().optional()
+})
+export type CreatePrInput = z.infer<typeof CreatePrInputSchema>

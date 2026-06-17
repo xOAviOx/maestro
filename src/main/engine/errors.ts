@@ -65,6 +65,31 @@ export class WorkspaceDirtyError extends MaestroError {
   }
 }
 
+export class MergeConflictError extends MaestroError {
+  constructor(conflictedFiles: string[], details?: Record<string, unknown>) {
+    super(
+      'MERGE_CONFLICT',
+      `Merge produced conflicts in ${conflictedFiles.length} file(s). The merge was aborted; resolve manually.`,
+      { conflictedFiles, ...details }
+    )
+    this.name = 'MergeConflictError'
+  }
+}
+
+export class NothingToMergeError extends MaestroError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('NOTHING_TO_MERGE', message, details)
+    this.name = 'NothingToMergeError'
+  }
+}
+
+export class GhUnavailableError extends MaestroError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('GH_UNAVAILABLE', message, details)
+    this.name = 'GhUnavailableError'
+  }
+}
+
 export class HarnessNotConfiguredError extends MaestroError {
   constructor(type: string) {
     super('HARNESS_NOT_CONFIGURED', `The "${type}" agent is not configured yet.`, { type })
