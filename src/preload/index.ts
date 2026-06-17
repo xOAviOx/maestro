@@ -38,6 +38,15 @@ const api: MaestroApi = {
   getDiff: (id: string) => ipcRenderer.invoke(IpcChannels.workspaceDiff, { id }),
   getFileDiff: (id: string, path: string, oldPath?: string) =>
     ipcRenderer.invoke(IpcChannels.workspaceFileDiff, { id, path, oldPath }),
+  getReviewStatus: (id: string) => ipcRenderer.invoke(IpcChannels.workspaceReviewStatus, { id }),
+  commitWorkspace: (id: string, message: string) =>
+    ipcRenderer.invoke(IpcChannels.workspaceCommit, { id, message }),
+  mergeWorkspace: (id: string, options?: { commitMessage?: string; archiveAfter?: boolean }) =>
+    ipcRenderer.invoke(IpcChannels.workspaceMerge, { id, ...options }),
+  createPullRequest: (
+    id: string,
+    options?: { title?: string; body?: string; commitMessage?: string }
+  ) => ipcRenderer.invoke(IpcChannels.workspaceCreatePr, { id, ...options }),
   archiveWorkspace: (id: string, force?: boolean) =>
     ipcRenderer.invoke(IpcChannels.workspaceArchive, { id, force }),
 
@@ -48,6 +57,9 @@ const api: MaestroApi = {
     ipcRenderer.invoke(IpcChannels.agentCancel, { id: workspaceId }),
   isAgentAvailable: (agentType: AgentType) =>
     ipcRenderer.invoke(IpcChannels.agentIsAvailable, { agentType }),
+
+  // integrations
+  isGhAvailable: () => ipcRenderer.invoke(IpcChannels.ghAvailable),
 
   // push subscription — payload re-validated in the renderer
   onWorkspaceEvent: (listener: (evt: WorkspacePushEvent) => void) => {

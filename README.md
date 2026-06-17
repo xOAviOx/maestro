@@ -10,8 +10,13 @@ helps ship it.
 
 ## Status
 
-Built module-by-module. Current: **Module 4 — UI shell** (engine, harness, supervisor,
-and the React UI are working; diff viewer + merge/PR are next).
+All core modules (0–6) are built and verified: scaffold, orchestration engine,
+harness layer (Claude Code), workspace supervisor, UI shell, Monaco diff viewer,
+and merge/PR/archive. **Module 4b (optional raw terminal per workspace) is the
+only deferred item.**
+
+Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m6`
+(run `npm run rebuild:node` first — see ABI note below).
 
 ## Native modules & ABI (important for dev)
 

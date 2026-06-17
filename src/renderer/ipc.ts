@@ -2,9 +2,12 @@ import { z } from 'zod'
 import {
   ErrorPayloadSchema,
   FileDiffSchema,
+  MergeResultSchema,
   PingResponseSchema,
+  PullRequestResultSchema,
   RepoInfoSchema,
   RepoRecordSchema,
+  ReviewStatusSchema,
   WorkspaceDiffSchema,
   WorkspacePushEventSchema,
   WorkspaceSchema,
@@ -12,9 +15,12 @@ import {
   type CreateWorkspaceInput,
   type FileDiff,
   type MaestroErrorCode,
+  type MergeResult,
   type PingResponse,
+  type PullRequestResult,
   type RepoInfo,
   type RepoRecord,
+  type ReviewStatus,
   type Workspace,
   type WorkspaceDiff,
   type WorkspacePushEvent
@@ -101,6 +107,19 @@ export const ipc = {
     call(window.maestro.getDiff(id), WorkspaceDiffSchema),
   getFileDiff: (id: string, path: string, oldPath?: string): Promise<FileDiff> =>
     call(window.maestro.getFileDiff(id, path, oldPath), FileDiffSchema),
+  getReviewStatus: (id: string): Promise<ReviewStatus> =>
+    call(window.maestro.getReviewStatus(id), ReviewStatusSchema),
+  commitWorkspace: (id: string, message: string): Promise<boolean> =>
+    call(window.maestro.commitWorkspace(id, message), z.boolean()),
+  mergeWorkspace: (
+    id: string,
+    options?: { commitMessage?: string; archiveAfter?: boolean }
+  ): Promise<MergeResult> => call(window.maestro.mergeWorkspace(id, options), MergeResultSchema),
+  createPullRequest: (
+    id: string,
+    options?: { title?: string; body?: string; commitMessage?: string }
+  ): Promise<PullRequestResult> =>
+    call(window.maestro.createPullRequest(id, options), PullRequestResultSchema),
   archiveWorkspace: (id: string, force?: boolean): Promise<void> =>
     callVoid(window.maestro.archiveWorkspace(id, force)),
 
@@ -111,6 +130,7 @@ export const ipc = {
     callVoid(window.maestro.cancelAgent(workspaceId)),
   isAgentAvailable: (agentType: AgentType): Promise<boolean> =>
     call(window.maestro.isAgentAvailable(agentType), z.boolean()),
+  isGhAvailable: (): Promise<boolean> => call(window.maestro.isGhAvailable(), z.boolean()),
 
   // push subscription — re-validate every event before app code sees it
   onWorkspaceEvent: (listener: (evt: WorkspacePushEvent) => void): (() => void) =>

@@ -45,6 +45,7 @@ interface MaestroState {
   selectedWorkspaceId: string | null
   chats: Record<string, ChatItem[]>
   claudeAvailable: boolean
+  ghAvailable: boolean
 
   // ui
   loading: boolean
@@ -75,6 +76,7 @@ export const useStore = create<MaestroState>((set, get) => ({
   selectedWorkspaceId: null,
   chats: {},
   claudeAvailable: false,
+  ghAvailable: false,
 
   loading: false,
   error: null,
@@ -88,11 +90,12 @@ export const useStore = create<MaestroState>((set, get) => ({
     ipc.onWorkspaceEvent((evt) => get()._handlePush(evt))
 
     try {
-      const [repos, claudeAvailable] = await Promise.all([
+      const [repos, claudeAvailable, ghAvailable] = await Promise.all([
         ipc.listRepos(),
-        ipc.isAgentAvailable('claude-code')
+        ipc.isAgentAvailable('claude-code'),
+        ipc.isGhAvailable()
       ])
-      set({ repos, claudeAvailable })
+      set({ repos, claudeAvailable, ghAvailable })
       const first = repos[0]
       if (first) await get().selectRepo(first.path)
     } catch (err) {
@@ -137,7 +140,11 @@ export const useStore = create<MaestroState>((set, get) => ({
     if (!repoPath) return
     try {
       const workspaces = await ipc.listWorkspaces(repoPath)
-      set({ workspaces })
+      const sel = get().selectedWorkspaceId
+      const selectedWorkspaceId = workspaces.some((w) => w.id === sel)
+        ? sel
+        : (workspaces[0]?.id ?? null)
+      set({ workspaces, selectedWorkspaceId })
     } catch (err) {
       set({ error: errMessage(err) })
     }

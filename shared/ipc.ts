@@ -2,9 +2,12 @@ import type {
   AgentType,
   CreateWorkspaceInput,
   FileDiff,
+  MergeResult,
   PingResponse,
+  PullRequestResult,
   RepoInfo,
   RepoRecord,
+  ReviewStatus,
   Workspace,
   WorkspaceDiff,
   WorkspacePushEvent
@@ -33,7 +36,14 @@ export const IpcChannels = {
   workspaceGet: 'maestro:workspace:get',
   workspaceDiff: 'maestro:workspace:diff',
   workspaceFileDiff: 'maestro:workspace:fileDiff',
+  workspaceReviewStatus: 'maestro:workspace:reviewStatus',
+  workspaceCommit: 'maestro:workspace:commit',
+  workspaceMerge: 'maestro:workspace:merge',
+  workspaceCreatePr: 'maestro:workspace:createPr',
   workspaceArchive: 'maestro:workspace:archive',
+
+  // integrations
+  ghAvailable: 'maestro:gh:available',
 
   // agents
   agentStart: 'maestro:agent:start',
@@ -71,6 +81,16 @@ export interface MaestroApi {
   getWorkspace(id: string): Promise<Workspace>
   getDiff(id: string): Promise<WorkspaceDiff>
   getFileDiff(id: string, path: string, oldPath?: string): Promise<FileDiff>
+  getReviewStatus(id: string): Promise<ReviewStatus>
+  commitWorkspace(id: string, message: string): Promise<boolean>
+  mergeWorkspace(
+    id: string,
+    options?: { commitMessage?: string; archiveAfter?: boolean }
+  ): Promise<MergeResult>
+  createPullRequest(
+    id: string,
+    options?: { title?: string; body?: string; commitMessage?: string }
+  ): Promise<PullRequestResult>
   archiveWorkspace(id: string, force?: boolean): Promise<void>
 
   // --- agents ---
@@ -79,6 +99,9 @@ export interface MaestroApi {
   startAgent(workspaceId: string, prompt: string, model?: string): Promise<void>
   cancelAgent(workspaceId: string): Promise<void>
   isAgentAvailable(agentType: AgentType): Promise<boolean>
+
+  // --- integrations ---
+  isGhAvailable(): Promise<boolean>
 
   // --- push subscription ---
   /** Subscribe to workspace push events. Returns an unsubscribe function. */

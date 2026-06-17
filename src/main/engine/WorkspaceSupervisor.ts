@@ -18,6 +18,7 @@ interface RunHandle {
  * - Tracks active runs per workspace (a workspace runs at most one turn at a time).
  * - Drives the WorkspaceStatus state machine:
  *     idle --start--> running --complete--> awaiting_input
+ * 
  *                            \--error-----> error
  *                            \--cancel----> idle
  * - Supports MULTIPLE concurrent runs across DIFFERENT workspaces: each run gets

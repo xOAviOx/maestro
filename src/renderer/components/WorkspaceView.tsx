@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { AgentChat } from './AgentChat'
 import { DiffViewer } from './DiffViewer'
+import { ReviewBar } from './ReviewBar'
 import { StatusDot, statusLabel } from './StatusDot'
 
 type Tab = 'chat' | 'diff'
@@ -59,8 +60,10 @@ export function WorkspaceView(): JSX.Element {
         </div>
       </header>
 
-      {/* Keep both mounted? No — mount the active tab. DiffViewer refetches on
-          mount and on status change, which covers "refresh after each turn". */}
+      <ReviewBar workspace={workspace} />
+
+      {/* Mount the active tab. DiffViewer refetches on mount and on status
+          change, which covers "refresh after each turn". */}
       {tab === 'chat' ? <AgentChat workspace={workspace} /> : <DiffViewer workspace={workspace} />}
     </div>
   )

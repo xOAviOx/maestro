@@ -3,8 +3,11 @@ import { IpcChannels } from '@shared/ipc'
 import {
   AgentAvailabilityInputSchema,
   ArchiveWorkspaceInputSchema,
+  CommitWorkspaceInputSchema,
+  CreatePrInputSchema,
   CreateWorkspaceInputSchema,
   FileDiffInputSchema,
+  MergeWorkspaceInputSchema,
   PingRequestSchema,
   RegisterRepoInputSchema,
   RepoPathInputSchema,
@@ -111,10 +114,29 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const { id, path, oldPath } = FileDiffInputSchema.parse(raw)
     return engine.worktrees.getFileDiff(id, path, oldPath)
   })
+  handle(IpcChannels.workspaceReviewStatus, (raw) => {
+    const { id } = WorkspaceIdInputSchema.parse(raw)
+    return engine.worktrees.getReviewStatus(id)
+  })
+  handle(IpcChannels.workspaceCommit, (raw) => {
+    const { id, message } = CommitWorkspaceInputSchema.parse(raw)
+    return engine.worktrees.commitWorkspace(id, message)
+  })
+  handle(IpcChannels.workspaceMerge, (raw) => {
+    const { id, commitMessage, archiveAfter } = MergeWorkspaceInputSchema.parse(raw)
+    return engine.worktrees.mergeWorkspace(id, { commitMessage, archiveAfter })
+  })
+  handle(IpcChannels.workspaceCreatePr, (raw) => {
+    const { id, title, body, commitMessage } = CreatePrInputSchema.parse(raw)
+    return engine.worktrees.createPullRequest(id, { title, body, commitMessage })
+  })
   handle(IpcChannels.workspaceArchive, (raw) => {
     const { id, force } = ArchiveWorkspaceInputSchema.parse(raw)
     return engine.worktrees.archiveWorkspace(id, force ?? false)
   })
+
+  // --- integrations ---
+  handle(IpcChannels.ghAvailable, () => engine.worktrees.isGhAvailable())
 
   // --- agents ---
   handle(IpcChannels.agentStart, async (raw) => {

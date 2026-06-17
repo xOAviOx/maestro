@@ -192,6 +192,54 @@ export class GitService {
     await this.run(repoPath, ['worktree', 'prune'])
   }
 
+  // --- Merge / review ------------------------------------------------------
+
+  /** Path of the worktree where `branch` is currently checked out, or null. */
+  async findWorktreeForBranch(repoPath: string, branch: string): Promise<string | null> {
+    const worktrees = await this.listWorktrees(repoPath)
+    return worktrees.find((w) => w.branch === branch)?.path ?? null
+  }
+
+  /** Number of commits on `branch` not reachable from `base`. */
+  async commitCountBetween(cwd: string, base: string, branch: string): Promise<number> {
+    const res = await this.run(cwd, ['rev-list', '--count', `${base}..${branch}`], true)
+    const n = parseInt(res.stdout.trim(), 10)
+    return Number.isFinite(n) ? n : 0
+  }
+
+  /** Files left in a conflicted (unmerged) state. */
+  async listConflictedFiles(cwd: string): Promise<string[]> {
+    const res = await this.run(cwd, ['diff', '--name-only', '--diff-filter=U'], true)
+    return splitLines(res.stdout)
+  }
+
+  /**
+   * Merge `branch` into the branch checked out at `baseWorktree`. On conflict,
+   * the merge is ABORTED (leaving the base worktree clean) and the conflicted
+   * files are returned — we never leave a half-merged state.
+   */
+  async merge(
+    baseWorktree: string,
+    branch: string,
+    message: string
+  ): Promise<{ ok: boolean; conflicted: string[] }> {
+    const res = await this.run(baseWorktree, ['merge', '--no-ff', '-m', message, branch], true)
+    if (res.exitCode === 0) return { ok: true, conflicted: [] }
+    const conflicted = await this.listConflictedFiles(baseWorktree)
+    await this.run(baseWorktree, ['merge', '--abort'], true)
+    return { ok: false, conflicted }
+  }
+
+  async listRemotes(cwd: string): Promise<string[]> {
+    const res = await this.run(cwd, ['remote'], true)
+    return splitLines(res.stdout)
+  }
+
+  /** Push `branch` to `remote`, setting upstream. */
+  async push(cwd: string, remote: string, branch: string): Promise<void> {
+    await this.run(cwd, ['push', '-u', remote, branch])
+  }
+
   // --- Status / diff -------------------------------------------------------
 
   /** True if the worktree has staged or unstaged changes (ignores untracked). */
