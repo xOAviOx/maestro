@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
+    "postinstall": "node scripts/fix-node-pty.cjs",
+    "fix:node-pty": "node scripts/fix-node-pty.cjs",
     "build": "npm run typecheck && electron-vite build",
     "package:win": "npm run build && electron-builder --win",
     "package:dir": "npm run build && electron-builder --dir",

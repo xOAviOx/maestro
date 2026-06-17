@@ -29,6 +29,9 @@ export const IpcChannels = {
   // dialogs
   dialogOpenDirectory: 'maestro:dialog:openDirectory',
 
+  // shell
+  openExternal: 'maestro:shell:openExternal',
+
   // repos
   repoRegister: 'maestro:repo:register',
   repoList: 'maestro:repo:list',
@@ -86,6 +89,9 @@ export interface MaestroApi {
 
   /** Show a native folder picker; resolves to the chosen path or null if cancelled. */
   openDirectoryDialog(): Promise<string | null>
+
+  /** Open a URL in the user's default browser (for agent login OAuth links). */
+  openExternal(url: string): Promise<void>
 
   // --- repos ---
   registerRepo(repoPath: string): Promise<RepoInfo>

@@ -35,6 +35,15 @@ Maestro**. Open **Settings → Accounts** (gear button in the sidebar) to:
 Credentials are owned by each CLI (OS keychain / dotfiles); Maestro only detects
 login state and never injects tokens into the agent's environment.
 
+**Advanced (headless / CI).** For machines that can't run an interactive login,
+each agent's **Advanced** section accepts a pasted token or API key
+(`claude setup-token` OAuth token, Anthropic API key, or OpenAI API key). It's
+encrypted at rest with Electron `safeStorage` (OS keychain), kept **write-only**
+(you can save or remove it, but it's never shown again), and injected as the
+appropriate env var (`CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` /
+`OPENAI_API_KEY`) only when an agent spawns. Prefer the CLI login above whenever
+you can.
+
 ## Native modules & ABI (important for dev)
 
 `better-sqlite3` is a native module and must match the ABI of whatever runs it:

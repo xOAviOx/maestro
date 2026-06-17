@@ -1,4 +1,5 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { z } from 'zod'
 import { IpcChannels } from '@shared/ipc'
 import {
   AgentAvailabilityInputSchema,
@@ -72,6 +73,17 @@ export function registerIpcHandlers(deps: IpcDeps): void {
       : await dialog.showOpenDialog(opts)
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0] ?? null
+  })
+
+  handle(IpcChannels.openExternal, async (raw): Promise<void> => {
+    const { url } = z.object({ url: z.string().url() }).parse(raw)
+    // Only ever hand http(s) URLs to the OS browser — never file:// or custom
+    // schemes that could trigger unexpected local handlers.
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      throw new Error(`Refusing to open non-web URL: ${parsed.protocol}`)
+    }
+    await shell.openExternal(url)
   })
 
   handle(IpcChannels.ping, (raw): PingResponse => {

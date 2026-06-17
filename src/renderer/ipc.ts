@@ -97,6 +97,8 @@ export const ipc = {
   openDirectoryDialog: (): Promise<string | null> =>
     call(window.maestro.openDirectoryDialog(), z.string().nullable()),
 
+  openExternal: (url: string): Promise<void> => callVoid(window.maestro.openExternal(url)),
+
   // repos
   registerRepo: (repoPath: string): Promise<RepoInfo> =>
     call(window.maestro.registerRepo(repoPath), RepoInfoSchema),

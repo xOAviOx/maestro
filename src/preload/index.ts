@@ -25,6 +25,8 @@ const api: MaestroApi = {
 
   openDirectoryDialog: () => ipcRenderer.invoke(IpcChannels.dialogOpenDirectory),
 
+  openExternal: (url: string) => ipcRenderer.invoke(IpcChannels.openExternal, { url }),
+
   // repos
   registerRepo: (repoPath: string) => ipcRenderer.invoke(IpcChannels.repoRegister, { repoPath }),
   listRepos: () => ipcRenderer.invoke(IpcChannels.repoList),
