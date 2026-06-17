@@ -1,0 +1,8 @@
+node_modules/
+out/
+dist/
+.DS_Store
+*.log
+.vite/
+node_modules/.tmp/
+# Maestro local data lives under the OS home dir (~/.maestro), never in-repo.

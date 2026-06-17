@@ -1,0 +1,27 @@
+appId: build.maestro.app
+productName: Maestro
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - package.json
+# Windows target — primary, built on Windows.
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+# macOS target — enable later via a macOS CI runner (signing requires a Mac).
+# mac:
+#   target:
+#     - target: dmg
+#       arch:
+#         - arm64
+#         - x64
+#   category: public.app-category.developer-tools
