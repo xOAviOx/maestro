@@ -65,7 +65,7 @@ maestro/
 
 ---
 
-## What's DONE (modules 0–6, all typecheck-clean + smoke-verified)
+## What's DONE (modules 0–6 + 4b, all typecheck-clean + smoke-verified)
 
 - [x] **Module 0 — Scaffold.** Electron + electron-vite + React + TypeScript +
       Tailwind. Security hardening (sandbox, contextIsolation, CSP). Build,
@@ -98,14 +98,15 @@ maestro/
       surfaces conflicts explicitly); merge logic that **aborts cleanly on
       conflict and reports the conflicted files** (never silently fails).
       Smoke: `smoke:m6` (happy-path merge, clean conflict abort, archive).
+- [x] **Module 4b — Raw terminal per workspace.** `PtyManager` (main) spawns a
+      shell in the workspace's worktree via `node-pty`; `TerminalView` (renderer)
+      renders it with xterm.js, wired through dedicated IPC channels. node-pty
+      ships N-API prebuilds, so it needs no per-ABI rebuild. Smoke: `smoke:m4b`.
 
 ---
 
 ## What's TO DO / deferred
 
-- [ ] **Module 4b — Raw terminal per workspace** (optional). Embed an xterm.js
-      terminal backed by `node-pty` in main, so a workspace can drop to a shell
-      in its worktree. The only intentionally-deferred core item.
 - [ ] **macOS signed build.** `electron-builder.yml` has a stubbed mac/`dmg`
       target. Needs a Mac CI runner + signing/notarization. Develop & package on
       Windows first (current target), add mac as a later CI step.

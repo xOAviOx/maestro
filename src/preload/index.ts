@@ -4,6 +4,8 @@ import type { MaestroApi } from '@shared/ipc'
 import type {
   AgentType,
   CreateWorkspaceInput,
+  TerminalDataEvent,
+  TerminalExitEvent,
   WorkspacePushEvent
 } from '@shared/types'
 
@@ -60,6 +62,32 @@ const api: MaestroApi = {
 
   // integrations
   isGhAvailable: () => ipcRenderer.invoke(IpcChannels.ghAvailable),
+
+  // terminal
+  startTerminal: (workspaceId: string, cols: number, rows: number) =>
+    ipcRenderer.invoke(IpcChannels.terminalStart, { workspaceId, cols, rows }),
+  sendTerminalInput: (workspaceId: string, data: string): void =>
+    ipcRenderer.send(IpcChannels.terminalInput, { workspaceId, data }),
+  resizeTerminal: (workspaceId: string, cols: number, rows: number): void =>
+    ipcRenderer.send(IpcChannels.terminalResize, { workspaceId, cols, rows }),
+  disposeTerminal: (workspaceId: string) =>
+    ipcRenderer.invoke(IpcChannels.terminalDispose, { id: workspaceId }),
+  onTerminalData: (listener: (evt: TerminalDataEvent) => void) => {
+    const channelListener = (_e: unknown, payload: unknown): void =>
+      listener(payload as TerminalDataEvent)
+    ipcRenderer.on(IpcChannels.terminalData, channelListener)
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.terminalData, channelListener)
+    }
+  },
+  onTerminalExit: (listener: (evt: TerminalExitEvent) => void) => {
+    const channelListener = (_e: unknown, payload: unknown): void =>
+      listener(payload as TerminalExitEvent)
+    ipcRenderer.on(IpcChannels.terminalExit, channelListener)
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.terminalExit, channelListener)
+    }
+  },
 
   // push subscription — payload re-validated in the renderer
   onWorkspaceEvent: (listener: (evt: WorkspacePushEvent) => void) => {

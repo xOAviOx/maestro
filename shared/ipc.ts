@@ -8,6 +8,9 @@ import type {
   RepoInfo,
   RepoRecord,
   ReviewStatus,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  TerminalStartResult,
   Workspace,
   WorkspaceDiff,
   WorkspacePushEvent
@@ -44,6 +47,14 @@ export const IpcChannels = {
 
   // integrations
   ghAvailable: 'maestro:gh:available',
+
+  // terminal (node-pty)
+  terminalStart: 'maestro:terminal:start',
+  terminalInput: 'maestro:terminal:input',
+  terminalResize: 'maestro:terminal:resize',
+  terminalDispose: 'maestro:terminal:dispose',
+  terminalData: 'maestro:terminal:data', // push
+  terminalExit: 'maestro:terminal:exit', // push
 
   // agents
   agentStart: 'maestro:agent:start',
@@ -102,6 +113,18 @@ export interface MaestroApi {
 
   // --- integrations ---
   isGhAvailable(): Promise<boolean>
+
+  // --- terminal (node-pty) ---
+  /** Start (or re-attach to) the shell for a workspace; returns replay buffer. */
+  startTerminal(workspaceId: string, cols: number, rows: number): Promise<TerminalStartResult>
+  /** Send keystrokes to the workspace's shell (fire-and-forget). */
+  sendTerminalInput(workspaceId: string, data: string): void
+  /** Resize the workspace's shell (fire-and-forget). */
+  resizeTerminal(workspaceId: string, cols: number, rows: number): void
+  /** Kill the workspace's shell. */
+  disposeTerminal(workspaceId: string): Promise<void>
+  onTerminalData(listener: (evt: TerminalDataEvent) => void): () => void
+  onTerminalExit(listener: (evt: TerminalExitEvent) => void): () => void
 
   // --- push subscription ---
   /** Subscribe to workspace push events. Returns an unsubscribe function. */

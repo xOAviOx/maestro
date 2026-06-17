@@ -3,9 +3,10 @@ import { useStore } from '../store'
 import { AgentChat } from './AgentChat'
 import { DiffViewer } from './DiffViewer'
 import { ReviewBar } from './ReviewBar'
+import { TerminalView } from './TerminalView'
 import { StatusDot, statusLabel } from './StatusDot'
 
-type Tab = 'chat' | 'diff'
+type Tab = 'chat' | 'diff' | 'terminal'
 
 /** Main panel: header for the selected workspace + tabbed chat / diff. */
 export function WorkspaceView(): JSX.Element {
@@ -49,6 +50,7 @@ export function WorkspaceView(): JSX.Element {
           <div className="flex gap-1 rounded-lg bg-slate-900 p-1">
             {tabBtn('chat', 'Chat')}
             {tabBtn('diff', 'Diff')}
+            {tabBtn('terminal', 'Terminal')}
           </div>
           <button
             className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
@@ -63,8 +65,11 @@ export function WorkspaceView(): JSX.Element {
       <ReviewBar workspace={workspace} />
 
       {/* Mount the active tab. DiffViewer refetches on mount and on status
-          change, which covers "refresh after each turn". */}
-      {tab === 'chat' ? <AgentChat workspace={workspace} /> : <DiffViewer workspace={workspace} />}
+          change, which covers "refresh after each turn". The pty behind the
+          terminal persists in main across tab switches. */}
+      {tab === 'chat' && <AgentChat workspace={workspace} />}
+      {tab === 'diff' && <DiffViewer workspace={workspace} />}
+      {tab === 'terminal' && <TerminalView workspace={workspace} />}
     </div>
   )
 }

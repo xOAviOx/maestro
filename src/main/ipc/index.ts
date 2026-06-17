@@ -13,17 +13,23 @@ import {
   RepoPathInputSchema,
   SetFilesToCopyInputSchema,
   StartAgentInputSchema,
+  TerminalInputSchema,
+  TerminalResizeSchema,
+  TerminalStartInputSchema,
   WorkspaceIdInputSchema,
-  type PingResponse
+  type PingResponse,
+  type TerminalStartResult
 } from '@shared/types'
 import { toErrorPayload } from '../engine/errors'
 import type { Engine } from '../engine'
 import type { WorkspaceSupervisor } from '../engine/WorkspaceSupervisor'
+import type { PtyManager } from '../terminal/PtyManager'
 import { log } from '../log'
 
 export interface IpcDeps {
   engine: Engine
   supervisor: WorkspaceSupervisor
+  ptyManager: PtyManager
 }
 
 /**
@@ -34,7 +40,7 @@ export interface IpcDeps {
  * message instead of crashing main.
  */
 export function registerIpcHandlers(deps: IpcDeps): void {
-  const { engine, supervisor } = deps
+  const { engine, supervisor, ptyManager } = deps
 
   // Wrap a handler so all errors become serializable ErrorPayloads.
   const handle = <T>(
@@ -150,6 +156,35 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   handle(IpcChannels.agentIsAvailable, (raw) => {
     const { agentType } = AgentAvailabilityInputSchema.parse(raw)
     return supervisor.isAgentAvailable(agentType)
+  })
+
+  // --- terminal (node-pty) ---
+  handle(IpcChannels.terminalStart, async (raw): Promise<TerminalStartResult> => {
+    const { workspaceId, cols, rows } = TerminalStartInputSchema.parse(raw)
+    const ws = await engine.worktrees.getWorkspace(workspaceId) // throws if not found
+    const buffer = ptyManager.start(workspaceId, ws.worktreePath, cols, rows)
+    return { buffer }
+  })
+  handle(IpcChannels.terminalDispose, (raw) => {
+    const { id } = WorkspaceIdInputSchema.parse(raw)
+    ptyManager.dispose(id)
+  })
+  // Input/resize are high-frequency and one-way (no ack needed).
+  ipcMain.on(IpcChannels.terminalInput, (_event, raw: unknown) => {
+    try {
+      const { workspaceId, data } = TerminalInputSchema.parse(raw)
+      ptyManager.write(workspaceId, data)
+    } catch (err) {
+      log.warn('ipc.terminal-input-error', { message: String(err) })
+    }
+  })
+  ipcMain.on(IpcChannels.terminalResize, (_event, raw: unknown) => {
+    try {
+      const { workspaceId, cols, rows } = TerminalResizeSchema.parse(raw)
+      ptyManager.resize(workspaceId, cols, rows)
+    } catch {
+      // ignore malformed resize
+    }
   })
 
   log.info('ipc.handlers-registered')

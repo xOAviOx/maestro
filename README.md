@@ -10,13 +10,13 @@ helps ship it.
 
 ## Status
 
-All core modules (0–6) are built and verified: scaffold, orchestration engine,
+All modules (0–6 + 4b) are built and verified: scaffold, orchestration engine,
 harness layer (Claude Code), workspace supervisor, UI shell, Monaco diff viewer,
-and merge/PR/archive. **Module 4b (optional raw terminal per workspace) is the
-only deferred item.**
+merge/PR/archive, and a raw terminal per workspace (node-pty + xterm).
 
-Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m6`
-(run `npm run rebuild:node` first — see ABI note below).
+Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m6` plus
+`smoke:m4b` (run `npm run rebuild:node` first — see ABI note below; `smoke:m4b`
+works on either ABI since node-pty ships N-API prebuilds).
 
 ## Native modules & ABI (important for dev)
 

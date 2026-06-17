@@ -329,3 +329,45 @@ export const CreatePrInputSchema = z.object({
   commitMessage: z.string().optional()
 })
 export type CreatePrInput = z.infer<typeof CreatePrInputSchema>
+
+// ---------------------------------------------------------------------------
+// Module 4b — raw terminal per workspace (node-pty + xterm)
+// ---------------------------------------------------------------------------
+
+export const TerminalStartInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive()
+})
+export type TerminalStartInput = z.infer<typeof TerminalStartInputSchema>
+
+export const TerminalStartResultSchema = z.object({
+  /** Recent output replayed when re-attaching to an existing session. */
+  buffer: z.string()
+})
+export type TerminalStartResult = z.infer<typeof TerminalStartResultSchema>
+
+export const TerminalInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  data: z.string()
+})
+export type TerminalInputMessage = z.infer<typeof TerminalInputSchema>
+
+export const TerminalResizeSchema = z.object({
+  workspaceId: z.string().min(1),
+  cols: z.number().int().positive(),
+  rows: z.number().int().positive()
+})
+export type TerminalResizeMessage = z.infer<typeof TerminalResizeSchema>
+
+export const TerminalDataEventSchema = z.object({
+  workspaceId: z.string(),
+  data: z.string()
+})
+export type TerminalDataEvent = z.infer<typeof TerminalDataEventSchema>
+
+export const TerminalExitEventSchema = z.object({
+  workspaceId: z.string(),
+  exitCode: z.number()
+})
+export type TerminalExitEvent = z.infer<typeof TerminalExitEventSchema>

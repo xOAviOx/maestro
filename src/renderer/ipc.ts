@@ -8,6 +8,9 @@ import {
   RepoInfoSchema,
   RepoRecordSchema,
   ReviewStatusSchema,
+  TerminalDataEventSchema,
+  TerminalExitEventSchema,
+  TerminalStartResultSchema,
   WorkspaceDiffSchema,
   WorkspacePushEventSchema,
   WorkspaceSchema,
@@ -21,6 +24,9 @@ import {
   type RepoInfo,
   type RepoRecord,
   type ReviewStatus,
+  type TerminalDataEvent,
+  type TerminalExitEvent,
+  type TerminalStartResult,
   type Workspace,
   type WorkspaceDiff,
   type WorkspacePushEvent
@@ -131,6 +137,26 @@ export const ipc = {
   isAgentAvailable: (agentType: AgentType): Promise<boolean> =>
     call(window.maestro.isAgentAvailable(agentType), z.boolean()),
   isGhAvailable: (): Promise<boolean> => call(window.maestro.isGhAvailable(), z.boolean()),
+
+  // terminal
+  startTerminal: (workspaceId: string, cols: number, rows: number): Promise<TerminalStartResult> =>
+    call(window.maestro.startTerminal(workspaceId, cols, rows), TerminalStartResultSchema),
+  sendTerminalInput: (workspaceId: string, data: string): void =>
+    window.maestro.sendTerminalInput(workspaceId, data),
+  resizeTerminal: (workspaceId: string, cols: number, rows: number): void =>
+    window.maestro.resizeTerminal(workspaceId, cols, rows),
+  disposeTerminal: (workspaceId: string): Promise<void> =>
+    callVoid(window.maestro.disposeTerminal(workspaceId)),
+  onTerminalData: (listener: (evt: TerminalDataEvent) => void): (() => void) =>
+    window.maestro.onTerminalData((raw) => {
+      const parsed = TerminalDataEventSchema.safeParse(raw)
+      if (parsed.success) listener(parsed.data)
+    }),
+  onTerminalExit: (listener: (evt: TerminalExitEvent) => void): (() => void) =>
+    window.maestro.onTerminalExit((raw) => {
+      const parsed = TerminalExitEventSchema.safeParse(raw)
+      if (parsed.success) listener(parsed.data)
+    }),
 
   // push subscription — re-validate every event before app code sees it
   onWorkspaceEvent: (listener: (evt: WorkspacePushEvent) => void): (() => void) =>

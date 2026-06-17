@@ -3,6 +3,7 @@ import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
 import { createEngine, type Engine } from './engine'
 import { WorkspaceSupervisor } from './engine/WorkspaceSupervisor'
+import { PtyManager } from './terminal/PtyManager'
 import { IpcChannels } from '@shared/ipc'
 import type { WorkspacePushEvent } from '@shared/types'
 import { log } from './log'
@@ -13,6 +14,7 @@ const RENDERER_DEV_URL = process.env['ELECTRON_RENDERER_URL']
 
 let engine: Engine | null = null
 let supervisor: WorkspaceSupervisor | null = null
+let ptyManager: PtyManager | null = null
 
 function createMainWindow(): BrowserWindow {
   const window = new BrowserWindow({
@@ -57,11 +59,16 @@ function createMainWindow(): BrowserWindow {
   return window
 }
 
+/** Send a payload to every live renderer. */
+function sendToAll(channel: string, payload: unknown): void {
+  for (const wc of webContents.getAllWebContents()) {
+    if (!wc.isDestroyed()) wc.send(channel, payload)
+  }
+}
+
 /** Push a supervisor event to every live renderer. */
 function broadcast(evt: WorkspacePushEvent): void {
-  for (const wc of webContents.getAllWebContents()) {
-    if (!wc.isDestroyed()) wc.send(IpcChannels.workspaceEvent, evt)
-  }
+  sendToAll(IpcChannels.workspaceEvent, evt)
 }
 
 app.whenReady().then(() => {
@@ -70,7 +77,12 @@ app.whenReady().then(() => {
   supervisor = new WorkspaceSupervisor(engine)
   supervisor.subscribe(broadcast)
 
-  registerIpcHandlers({ engine, supervisor })
+  ptyManager = new PtyManager(
+    (e) => sendToAll(IpcChannels.terminalData, e),
+    (e) => sendToAll(IpcChannels.terminalExit, e)
+  )
+
+  registerIpcHandlers({ engine, supervisor, ptyManager })
 
   createMainWindow()
 
@@ -86,7 +98,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  // Stop any in-flight agent runs and close the DB cleanly.
+  // Stop any in-flight agent runs, kill shells, and close the DB cleanly.
   supervisor?.cancelAll()
+  ptyManager?.disposeAll()
   engine?.close()
 })
