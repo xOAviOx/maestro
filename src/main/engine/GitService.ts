@@ -1,4 +1,4 @@
-import { execa } from 'execa'
+import execa from 'execa'
 import path from 'path'
 import { GitError } from './errors'
 import type { DiffFile, DiffFileStatus, WorkspaceDiff } from '@shared/types'

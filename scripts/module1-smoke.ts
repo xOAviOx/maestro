@@ -6,7 +6,7 @@
  * source repo lives under a path containing a SPACE (and thus the worktree path
  * does too). Run with: `npm run smoke:m1`.
  */
-import { execa } from 'execa'
+import execa from 'execa'
 import fs from 'fs'
 import os from 'os'
 import path from 'path'
