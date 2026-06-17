@@ -1,44 +1,34 @@
-import { useState } from 'react'
-import { useAppStore } from './store'
+import { useEffect } from 'react'
+import { useStore } from './store'
+import { WorkspaceSidebar } from './components/WorkspaceSidebar'
+import { WorkspaceView } from './components/WorkspaceView'
 
-/**
- * Module 0 placeholder UI. Proves the secure IPC bridge works end to end:
- * the renderer sends a string to main and renders main's validated reply.
- * Replaced by the real workspace shell in Module 4.
- */
 export default function App(): JSX.Element {
-  const [message, setMessage] = useState('hello from renderer')
-  const { ping, pinging, lastReply, lastError } = useAppStore()
+  const init = useStore((s) => s.init)
+  const error = useStore((s) => s.error)
+  const clearError = useStore((s) => s.clearError)
+
+  useEffect(() => {
+    void init()
+  }, [init])
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 p-8">
-      <div className="text-center">
-        <h1 className="text-3xl font-semibold tracking-tight">Maestro</h1>
-        <p className="mt-1 text-sm text-slate-400">
-          Parallel coding-agent orchestrator — Module 0 scaffold
-        </p>
-      </div>
+    <div className="flex h-full w-full overflow-hidden">
+      <WorkspaceSidebar />
+      <main className="flex min-w-0 flex-1 flex-col">
+        <WorkspaceView />
+      </main>
 
-      <div className="flex w-full max-w-xl items-center gap-2">
-        <input
-          className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:border-slate-500"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="message to round-trip through main"
-        />
-        <button
-          className="rounded-md bg-status-running px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          onClick={() => void ping(message)}
-          disabled={pinging}
-        >
-          {pinging ? 'Pinging…' : 'Ping main'}
-        </button>
-      </div>
-
-      <div className="h-10 text-center text-sm">
-        {lastReply && <span className="text-status-done">{lastReply}</span>}
-        {lastError && <span className="text-status-error">Error: {lastError}</span>}
-      </div>
+      {error && (
+        <div className="fixed bottom-4 left-1/2 z-30 -translate-x-1/2">
+          <div className="flex items-center gap-3 rounded-md border border-red-800 bg-red-950 px-4 py-2 text-sm text-red-200 shadow-lg">
+            <span className="max-w-md truncate">{error}</span>
+            <button className="text-red-400 hover:text-red-200" onClick={clearError}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

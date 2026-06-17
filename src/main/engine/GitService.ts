@@ -213,14 +213,24 @@ export class GitService {
     })
   }
 
+  /** The merge-base commit between a base branch and the worktree's HEAD. */
+  async getMergeBase(worktreePath: string, baseBranch: string): Promise<string> {
+    return (await this.run(worktreePath, ['merge-base', baseBranch, 'HEAD'])).stdout.trim()
+  }
+
+  /** Contents of `relPath` at `ref` (e.g. a merge-base commit), or null if absent. */
+  async getFileAtRef(worktreePath: string, ref: string, relPath: string): Promise<string | null> {
+    const res = await this.run(worktreePath, ['show', `${ref}:${relPath}`], true)
+    if (res.exitCode !== 0) return null
+    return res.stdout
+  }
+
   /**
    * Diff of the worktree against its base branch: all changes since the branch
    * point (committed + uncommitted), plus a list of untracked files.
    */
   async getDiff(worktreePath: string, baseBranch: string): Promise<WorkspaceDiff> {
-    const mergeBase = (
-      await this.run(worktreePath, ['merge-base', baseBranch, 'HEAD'])
-    ).stdout.trim()
+    const mergeBase = await this.getMergeBase(worktreePath, baseBranch)
 
     const nameStatus = (
       await this.run(worktreePath, ['diff', '--name-status', '-M', mergeBase])

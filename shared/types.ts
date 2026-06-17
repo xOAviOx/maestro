@@ -9,6 +9,32 @@ import { z } from 'zod'
  */
 
 // ---------------------------------------------------------------------------
+// Errors (shared so main can throw them and the renderer can classify them)
+// ---------------------------------------------------------------------------
+
+export const MAESTRO_ERROR_CODES = [
+  'GIT_ERROR',
+  'NOT_A_GIT_REPO',
+  'WORKTREE_CONFLICT',
+  'WORKSPACE_NOT_FOUND',
+  'REPO_NOT_FOUND',
+  'WORKSPACE_DIRTY',
+  'HARNESS_NOT_CONFIGURED',
+  'HARNESS_UNAVAILABLE',
+  'INTERNAL'
+] as const
+export const MaestroErrorCodeSchema = z.enum(MAESTRO_ERROR_CODES)
+export type MaestroErrorCode = z.infer<typeof MaestroErrorCodeSchema>
+
+/** Serializable error shape sent to the renderer for any failed IPC call. */
+export const ErrorPayloadSchema = z.object({
+  code: MaestroErrorCodeSchema,
+  message: z.string(),
+  details: z.record(z.string(), z.unknown()).optional()
+})
+export type ErrorPayload = z.infer<typeof ErrorPayloadSchema>
+
+// ---------------------------------------------------------------------------
 // Module 0 — connectivity smoke test (ping/pong)
 // ---------------------------------------------------------------------------
 
@@ -99,7 +125,9 @@ export const CreateWorkspaceInputSchema = z.object({
   baseBranch: z.string().optional(),
   agentType: AgentTypeSchema.default('claude-code')
 })
-export type CreateWorkspaceInput = z.infer<typeof CreateWorkspaceInputSchema>
+// Use the INPUT type so callers may omit `agentType` (the schema default fills
+// it in at parse time). Internally createWorkspace parses to the resolved shape.
+export type CreateWorkspaceInput = z.input<typeof CreateWorkspaceInputSchema>
 
 export const DIFF_FILE_STATUSES = [
   'added',
@@ -121,6 +149,26 @@ export const DiffFileSchema = z.object({
 })
 export type DiffFile = z.infer<typeof DiffFileSchema>
 
+/** Full base-vs-worktree content for ONE file, for a side-by-side diff editor. */
+export const FileDiffSchema = z.object({
+  path: z.string(),
+  /** Content at the merge-base (empty for added/untracked files). */
+  original: z.string(),
+  /** Current content in the worktree (empty for deleted files). */
+  modified: z.string(),
+  /** True if the file looks binary or is too large to diff as text. */
+  binary: z.boolean()
+})
+export type FileDiff = z.infer<typeof FileDiffSchema>
+
+export const FileDiffInputSchema = z.object({
+  id: z.string().min(1),
+  path: z.string().min(1),
+  /** For renames/copies: the file's path at the base. */
+  oldPath: z.string().optional()
+})
+export type FileDiffInput = z.infer<typeof FileDiffInputSchema>
+
 export const WorkspaceDiffSchema = z.object({
   baseBranch: z.string(),
   /** The merge-base commit the diff is computed against. */
@@ -132,3 +180,95 @@ export const WorkspaceDiffSchema = z.object({
   untracked: z.array(z.string())
 })
 export type WorkspaceDiff = z.infer<typeof WorkspaceDiffSchema>
+
+// ---------------------------------------------------------------------------
+// Module 2 — agent events (the normalized harness output)
+// ---------------------------------------------------------------------------
+
+export const TokenUsageSchema = z.object({
+  inputTokens: z.number().optional(),
+  outputTokens: z.number().optional(),
+  cacheReadTokens: z.number().optional(),
+  cacheCreationTokens: z.number().optional(),
+  totalCostUsd: z.number().optional(),
+  model: z.string().optional()
+})
+export type TokenUsage = z.infer<typeof TokenUsageSchema>
+
+/**
+ * The normalized event stream every Harness emits, regardless of agent CLI.
+ * The rest of the app depends only on this union — never on a CLI's raw JSON.
+ * Validated with zod before crossing the IPC boundary to the renderer.
+ */
+export const AgentEventSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('session_started'), sessionId: z.string() }),
+  z.object({ kind: z.literal('assistant_text'), text: z.string() }),
+  z.object({ kind: z.literal('tool_use'), name: z.string(), input: z.unknown() }),
+  z.object({
+    kind: z.literal('tool_result'),
+    name: z.string(),
+    ok: z.boolean(),
+    summary: z.string().optional()
+  }),
+  z.object({
+    kind: z.literal('turn_complete'),
+    sessionId: z.string(),
+    usage: TokenUsageSchema.optional()
+  }),
+  z.object({ kind: z.literal('error'), message: z.string() })
+])
+export type AgentEvent = z.infer<typeof AgentEventSchema>
+
+// ---------------------------------------------------------------------------
+// Module 3 — supervisor: push events (main -> renderer) + IPC request payloads
+// ---------------------------------------------------------------------------
+
+/**
+ * Events the supervisor pushes to the renderer (via webContents.send). Carries
+ * either a normalized agent event or a workspace status change, always tagged
+ * with the workspace it belongs to so concurrent runs never get confused.
+ */
+export const WorkspacePushEventSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('agent_event'),
+    workspaceId: z.string(),
+    event: AgentEventSchema
+  }),
+  z.object({
+    type: z.literal('status_changed'),
+    workspaceId: z.string(),
+    status: WorkspaceStatusSchema
+  })
+])
+export type WorkspacePushEvent = z.infer<typeof WorkspacePushEventSchema>
+
+export const RegisterRepoInputSchema = z.object({ repoPath: z.string().min(1) })
+export type RegisterRepoInput = z.infer<typeof RegisterRepoInputSchema>
+
+export const SetFilesToCopyInputSchema = z.object({
+  repoPath: z.string().min(1),
+  patterns: z.array(z.string())
+})
+export type SetFilesToCopyInput = z.infer<typeof SetFilesToCopyInputSchema>
+
+export const StartAgentInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  prompt: z.string().min(1),
+  model: z.string().optional()
+})
+export type StartAgentInput = z.infer<typeof StartAgentInputSchema>
+
+export const WorkspaceIdInputSchema = z.object({ id: z.string().min(1) })
+export type WorkspaceIdInput = z.infer<typeof WorkspaceIdInputSchema>
+
+export const ArchiveWorkspaceInputSchema = z.object({
+  id: z.string().min(1),
+  force: z.boolean().optional()
+})
+export type ArchiveWorkspaceInput = z.infer<typeof ArchiveWorkspaceInputSchema>
+
+export const RepoPathInputSchema = z.object({ repoPath: z.string().min(1) })
+export type RepoPathInput = z.infer<typeof RepoPathInputSchema>
+
+export const AgentAvailabilityInputSchema = z.object({ agentType: AgentTypeSchema })
+export type AgentAvailabilityInput = z.infer<typeof AgentAvailabilityInputSchema>

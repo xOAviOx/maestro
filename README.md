@@ -10,7 +10,21 @@ helps ship it.
 
 ## Status
 
-Built module-by-module. Current: **Module 0 — Scaffold**.
+Built module-by-module. Current: **Module 4 — UI shell** (engine, harness, supervisor,
+and the React UI are working; diff viewer + merge/PR are next).
+
+## Native modules & ABI (important for dev)
+
+`better-sqlite3` is a native module and must match the ABI of whatever runs it:
+
+- **Running the app** (`npm run dev` / packaged) needs the **Electron** ABI:
+  run `npm run rebuild:electron` once (after install, or after switching back from
+  smoke tests).
+- **Running the engine smoke tests** (`npm run smoke:m1/2/3`, plain Node via tsx)
+  needs the **Node** ABI: run `npm run rebuild:node` first.
+
+Switching between the two requires re-running the matching rebuild. `npm install`
+leaves it on the Node ABI.
 
 ## Architecture
 

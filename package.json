@@ -15,11 +15,17 @@
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "smoke:m1": "tsx scripts/module1-smoke.ts"
+    "smoke:m1": "tsx scripts/module1-smoke.ts",
+    "smoke:m2": "tsx scripts/module2-smoke.ts",
+    "smoke:m3": "tsx scripts/module3-smoke.ts",
+    "rebuild:electron": "electron-builder install-app-deps",
+    "rebuild:node": "npm rebuild better-sqlite3"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "better-sqlite3": "^11.10.0",
     "execa": "^5.1.1",
+    "monaco-editor": "^0.52.2",
     "zod": "^3.24.1",
     "zustand": "^5.0.2"
   },

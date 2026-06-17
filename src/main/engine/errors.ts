@@ -1,20 +1,15 @@
+import type { ErrorPayload, MaestroErrorCode } from '@shared/types'
+
 /**
  * Typed errors for the engine.
  *
  * Every git op and agent run can fail. Failures are normalized to one of these
  * so the IPC layer can serialize them to the renderer as `{ code, message }`
- * without leaking stack traces or crashing the main process.
+ * without leaking stack traces or crashing the main process. The code union and
+ * the serializable ErrorPayload shape live in shared/types so the renderer can
+ * classify errors too.
  */
-export type MaestroErrorCode =
-  | 'GIT_ERROR'
-  | 'NOT_A_GIT_REPO'
-  | 'WORKTREE_CONFLICT'
-  | 'WORKSPACE_NOT_FOUND'
-  | 'REPO_NOT_FOUND'
-  | 'WORKSPACE_DIRTY'
-  | 'HARNESS_NOT_CONFIGURED'
-  | 'HARNESS_UNAVAILABLE'
-  | 'INTERNAL'
+export type { ErrorPayload, MaestroErrorCode } from '@shared/types'
 
 export class MaestroError extends Error {
   readonly code: MaestroErrorCode
@@ -70,11 +65,18 @@ export class WorkspaceDirtyError extends MaestroError {
   }
 }
 
-/** Serializable shape sent to the renderer for any failed IPC call. */
-export interface ErrorPayload {
-  code: MaestroErrorCode
-  message: string
-  details?: Record<string, unknown>
+export class HarnessNotConfiguredError extends MaestroError {
+  constructor(type: string) {
+    super('HARNESS_NOT_CONFIGURED', `The "${type}" agent is not configured yet.`, { type })
+    this.name = 'HarnessNotConfiguredError'
+  }
+}
+
+export class HarnessUnavailableError extends MaestroError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('HARNESS_UNAVAILABLE', message, details)
+    this.name = 'HarnessUnavailableError'
+  }
 }
 
 /** Normalize any thrown value into a MaestroError. */
