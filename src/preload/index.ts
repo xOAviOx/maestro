@@ -36,6 +36,8 @@ const api: MaestroApi = {
   listAllWorkspaces: () => ipcRenderer.invoke(IpcChannels.workspaceListAll),
   getWorkspace: (id: string) => ipcRenderer.invoke(IpcChannels.workspaceGet, { id }),
   getDiff: (id: string) => ipcRenderer.invoke(IpcChannels.workspaceDiff, { id }),
+  getFileDiff: (id: string, path: string, oldPath?: string) =>
+    ipcRenderer.invoke(IpcChannels.workspaceFileDiff, { id, path, oldPath }),
   archiveWorkspace: (id: string, force?: boolean) =>
     ipcRenderer.invoke(IpcChannels.workspaceArchive, { id, force }),
 

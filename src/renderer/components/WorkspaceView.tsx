@@ -1,13 +1,16 @@
+import { useState } from 'react'
 import { useStore } from '../store'
 import { AgentChat } from './AgentChat'
+import { DiffViewer } from './DiffViewer'
 import { StatusDot, statusLabel } from './StatusDot'
 
-/** Main panel: header for the selected workspace + the agent chat. */
+type Tab = 'chat' | 'diff'
+
+/** Main panel: header for the selected workspace + tabbed chat / diff. */
 export function WorkspaceView(): JSX.Element {
-  const workspace = useStore((s) =>
-    s.workspaces.find((w) => w.id === s.selectedWorkspaceId)
-  )
+  const workspace = useStore((s) => s.workspaces.find((w) => w.id === s.selectedWorkspaceId))
   const archiveWorkspace = useStore((s) => s.archiveWorkspace)
+  const [tab, setTab] = useState<Tab>('chat')
 
   if (!workspace) {
     return (
@@ -16,6 +19,17 @@ export function WorkspaceView(): JSX.Element {
       </div>
     )
   }
+
+  const tabBtn = (id: Tab, label: string): JSX.Element => (
+    <button
+      className={`rounded-md px-3 py-1 text-xs font-medium ${
+        tab === id ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/50'
+      }`}
+      onClick={() => setTab(id)}
+    >
+      {label}
+    </button>
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -30,16 +44,24 @@ export function WorkspaceView(): JSX.Element {
             {workspace.branch} ← {workspace.baseBranch}
           </div>
         </div>
-        <button
-          className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
-          onClick={() => void archiveWorkspace(workspace.id)}
-          title="Remove the worktree and archive this workspace"
-        >
-          Archive
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 rounded-lg bg-slate-900 p-1">
+            {tabBtn('chat', 'Chat')}
+            {tabBtn('diff', 'Diff')}
+          </div>
+          <button
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+            onClick={() => void archiveWorkspace(workspace.id)}
+            title="Remove the worktree and archive this workspace"
+          >
+            Archive
+          </button>
+        </div>
       </header>
 
-      <AgentChat workspace={workspace} />
+      {/* Keep both mounted? No — mount the active tab. DiffViewer refetches on
+          mount and on status change, which covers "refresh after each turn". */}
+      {tab === 'chat' ? <AgentChat workspace={workspace} /> : <DiffViewer workspace={workspace} />}
     </div>
   )
 }

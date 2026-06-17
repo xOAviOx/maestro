@@ -18,7 +18,8 @@
     "smoke:m1": "tsx scripts/module1-smoke.ts",
     "smoke:m2": "tsx scripts/module2-smoke.ts",
     "smoke:m3": "tsx scripts/module3-smoke.ts",
-    "rebuild:electron": "electron-builder install-app-deps",
+    "smoke:m5": "tsx scripts/module5-smoke.ts",
+    "rebuild:electron": "electron-rebuild -f -o better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3"
   },
   "dependencies": {

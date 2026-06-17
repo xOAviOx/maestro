@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   ErrorPayloadSchema,
+  FileDiffSchema,
   PingResponseSchema,
   RepoInfoSchema,
   RepoRecordSchema,
@@ -9,6 +10,7 @@ import {
   WorkspaceSchema,
   type AgentType,
   type CreateWorkspaceInput,
+  type FileDiff,
   type MaestroErrorCode,
   type PingResponse,
   type RepoInfo,
@@ -97,6 +99,8 @@ export const ipc = {
     call(window.maestro.getWorkspace(id), WorkspaceSchema),
   getDiff: (id: string): Promise<WorkspaceDiff> =>
     call(window.maestro.getDiff(id), WorkspaceDiffSchema),
+  getFileDiff: (id: string, path: string, oldPath?: string): Promise<FileDiff> =>
+    call(window.maestro.getFileDiff(id, path, oldPath), FileDiffSchema),
   archiveWorkspace: (id: string, force?: boolean): Promise<void> =>
     callVoid(window.maestro.archiveWorkspace(id, force)),
 

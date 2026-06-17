@@ -35,6 +35,14 @@ function createMainWindow(): BrowserWindow {
 
   window.on('ready-to-show', () => window.show())
 
+  // In dev, surface renderer console messages (CSP violations, worker errors,
+  // React warnings) in the main process log so they're visible in the terminal.
+  if (RENDERER_DEV_URL) {
+    window.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+      if (level >= 2) log.warn('renderer.console', { level, message, line, sourceId })
+    })
+  }
+
   window.webContents.setWindowOpenHandler((details) => {
     void shell.openExternal(details.url)
     return { action: 'deny' }
