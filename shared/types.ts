@@ -96,6 +96,9 @@ export const WorkspaceSchema = z.object({
   /** Agent session id, for resume. Null until the first turn completes. */
   sessionId: z.string().nullable(),
   status: WorkspaceStatusSchema,
+  /** Fan-out group id: set when this workspace is one variant of a fan-out
+   * task (sibling variants share it). Null for standalone workspaces. */
+  groupId: z.string().nullable(),
   createdAt: z.string(),
   archivedAt: z.string().nullable()
 })
