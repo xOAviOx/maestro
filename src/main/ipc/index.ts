@@ -188,6 +188,15 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const { id } = WorkspaceIdInputSchema.parse(raw)
     supervisor.cancelRun(id)
   })
+  handle(IpcChannels.agentEnqueue, (raw) => {
+    const input = EnqueueJobInputSchema.parse(raw)
+    return supervisor.enqueue(input)
+  })
+  handle(IpcChannels.agentQueueList, () => supervisor.listQueue())
+  handle(IpcChannels.agentJobCancel, (raw) => {
+    const { id } = WorkspaceIdInputSchema.parse(raw)
+    supervisor.cancelJob(id)
+  })
   handle(IpcChannels.agentIsAvailable, (raw) => {
     const { agentType } = AgentAvailabilityInputSchema.parse(raw)
     return supervisor.isAgentAvailable(agentType)
