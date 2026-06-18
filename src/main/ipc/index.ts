@@ -8,6 +8,8 @@ import {
   CommitWorkspaceInputSchema,
   CreatePrInputSchema,
   CreateWorkspaceInputSchema,
+  EnqueueJobInputSchema,
+  FanOutInputSchema,
   FileDiffInputSchema,
   MergeWorkspaceInputSchema,
   PingRequestSchema,
@@ -119,6 +121,18 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const input = CreateWorkspaceInputSchema.parse(raw)
     return engine.worktrees.createWorkspace(input)
   })
+  handle(IpcChannels.workspaceFanOut, async (raw) => {
+    const input = FanOutInputSchema.parse(raw)
+    const workspaces = await engine.worktrees.createFanOut(input)
+    // Kick off each variant's first turn with that variant's model (variant
+    // order matches workspace order from createFanOut).
+    await Promise.all(
+      workspaces.map((ws, i) =>
+        supervisor.startRun(ws.id, input.prompt, input.variants[i]?.model)
+      )
+    )
+    return workspaces
+  })
   handle(IpcChannels.workspaceList, (raw) => {
     const { repoPath } = RepoPathInputSchema.parse(raw)
     return engine.worktrees.listWorkspaces(repoPath)
@@ -155,6 +169,11 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   handle(IpcChannels.workspaceArchive, (raw) => {
     const { id, force } = ArchiveWorkspaceInputSchema.parse(raw)
     return engine.worktrees.archiveWorkspace(id, force ?? false)
+  })
+  handle(IpcChannels.workspaceArchiveSiblings, async (raw) => {
+    const { id } = WorkspaceIdInputSchema.parse(raw)
+    const ws = await engine.worktrees.getWorkspace(id)
+    if (ws.groupId) await engine.worktrees.archiveGroupExcept(ws.groupId, id)
   })
 
   // --- integrations ---
