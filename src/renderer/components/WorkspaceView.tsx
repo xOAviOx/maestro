@@ -12,6 +12,7 @@ type Tab = 'chat' | 'diff' | 'terminal'
 export function WorkspaceView(): JSX.Element {
   const workspace = useStore((s) => s.workspaces.find((w) => w.id === s.selectedWorkspaceId))
   const archiveWorkspace = useStore((s) => s.archiveWorkspace)
+  const archiveSiblings = useStore((s) => s.archiveSiblings)
   const [tab, setTab] = useState<Tab>('chat')
 
   if (!workspace) {
@@ -59,6 +60,15 @@ export function WorkspaceView(): JSX.Element {
           >
             Archive
           </button>
+          {workspace.groupId && (
+            <button
+              className="rounded-md border border-amber-700 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-950/40"
+              onClick={() => void archiveSiblings(workspace.id)}
+              title="Keep this variant; archive the other variants in its fan-out group"
+            >
+              Keep this · archive others
+            </button>
+          )}
         </div>
       </header>
 
