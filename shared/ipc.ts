@@ -17,6 +17,7 @@ import type {
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalStartResult,
+  TestResult,
   Workspace,
   WorkspaceDiff,
   WorkspacePushEvent
@@ -40,6 +41,7 @@ export const IpcChannels = {
   repoList: 'maestro:repo:list',
   repoGetInfo: 'maestro:repo:getInfo',
   repoSetFilesToCopy: 'maestro:repo:setFilesToCopy',
+  repoSetTestCommand: 'maestro:repo:setTestCommand',
 
   // workspaces
   workspaceCreate: 'maestro:workspace:create',
@@ -55,6 +57,7 @@ export const IpcChannels = {
   workspaceCreatePr: 'maestro:workspace:createPr',
   workspaceArchive: 'maestro:workspace:archive',
   workspaceArchiveSiblings: 'maestro:workspace:archiveSiblings',
+  workspaceRunTests: 'maestro:workspace:runTests',
 
   // integrations
   ghAvailable: 'maestro:gh:available',
@@ -106,6 +109,8 @@ export interface MaestroApi {
   listRepos(): Promise<RepoRecord[]>
   getRepoInfo(repoPath: string): Promise<RepoInfo>
   setFilesToCopy(repoPath: string, patterns: string[]): Promise<void>
+  /** Set the per-repo test command (empty string clears it). */
+  setTestCommand(repoPath: string, testCommand: string): Promise<void>
 
   // --- workspaces ---
   createWorkspace(input: CreateWorkspaceInput): Promise<Workspace>
@@ -131,6 +136,9 @@ export interface MaestroApi {
   /** Archive every other (non-archived) variant in this workspace's fan-out
    * group, keeping only `id`. No-op if the workspace isn't part of a group. */
   archiveSiblings(id: string): Promise<void>
+  /** Run the repo's configured test command inside this workspace's worktree;
+   * resolves with the captured pass/fail result. */
+  runTests(id: string): Promise<TestResult>
 
   // --- agents ---
   /** Start an agent turn. Resolves immediately (ack); progress arrives via
