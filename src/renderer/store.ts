@@ -200,6 +200,45 @@ export const useStore = create<MaestroState>((set, get) => ({
     }
   },
 
+  fanOut: async (name, baseBranch, prompt, variants) => {
+    const repoPath = get().activeRepoPath
+    if (!repoPath) return
+    set({ loading: true, error: null })
+    try {
+      const created = await ipc.fanOut({ repoPath, name, baseBranch, prompt, variants })
+      // Seed each variant's transcript with the shared prompt, then refresh so
+      // the new grouped workspaces appear; select the first variant.
+      set((s) => {
+        const chats = { ...s.chats }
+        for (const ws of created) {
+          chats[ws.id] = [
+            { id: nextId(), at: new Date().toISOString(), source: 'user', text: prompt }
+          ]
+        }
+        return { chats }
+      })
+      await get().refreshWorkspaces()
+      const first = created[0]
+      if (first) set({ selectedWorkspaceId: first.id })
+    } catch (err) {
+      set({ error: errMessage(err) })
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  archiveSiblings: async (workspaceId) => {
+    set({ loading: true, error: null })
+    try {
+      await ipc.archiveSiblings(workspaceId)
+      await get().refreshWorkspaces()
+    } catch (err) {
+      set({ error: errMessage(err) })
+    } finally {
+      set({ loading: false })
+    }
+  },
+
   refreshAgentAuth: async () => {
     try {
       const [claude, codex, claudeCred, codexCred] = await Promise.all([
