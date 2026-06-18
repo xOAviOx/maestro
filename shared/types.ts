@@ -451,6 +451,29 @@ export const CreatePrInputSchema = z.object({
 })
 export type CreatePrInput = z.infer<typeof CreatePrInputSchema>
 
+/**
+ * A persisted review outcome for a workspace. Recorded after a successful merge
+ * or PR so the UI can show history beyond the transient ReviewBar banner.
+ * `url` is the PR link (null for merges); `committed` mirrors whether
+ * uncommitted work was auto-committed as part of the action.
+ */
+export const REVIEW_EVENT_KINDS = ['merge', 'pr'] as const
+export const ReviewEventKindSchema = z.enum(REVIEW_EVENT_KINDS)
+export type ReviewEventKind = z.infer<typeof ReviewEventKindSchema>
+
+export const ReviewEventSchema = z.object({
+  id: z.string().uuid(),
+  workspaceId: z.string(),
+  repoPath: z.string(),
+  kind: ReviewEventKindSchema,
+  baseBranch: z.string(),
+  branch: z.string(),
+  url: z.string().nullable(),
+  committed: z.boolean(),
+  createdAt: z.string()
+})
+export type ReviewEvent = z.infer<typeof ReviewEventSchema>
+
 // ---------------------------------------------------------------------------
 // Module 4b — raw terminal per workspace (node-pty + xterm)
 // ---------------------------------------------------------------------------

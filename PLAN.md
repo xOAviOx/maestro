@@ -23,7 +23,7 @@ npm run dev
 
 # To run the headless smoke tests (Node ABI):
 npm run rebuild:node
-npm run smoke:m1   # … through smoke:m6
+npm run smoke:m1   # … through smoke:m8
 ```
 
 **Prerequisites:** Node 18+, Git, and the **Claude Code CLI** on PATH (for the
@@ -77,7 +77,7 @@ maestro/
 │   │   └── harness/   # Harness interface + ClaudeCodeHarness + Codex/Cursor stubs
 │   ├── preload/       # contextBridge: exposes a typed `window.maestro`
 │   └── renderer/      # React + Tailwind + Zustand UI
-└── scripts/           # module1..6 headless smoke tests
+└── scripts/           # module1..8 headless smoke tests
 ```
 
 **Security posture (hard constraints — do not regress):**
@@ -89,7 +89,7 @@ maestro/
 
 ---
 
-## What's DONE (modules 0–6 + 4b, all typecheck-clean + smoke-verified)
+## What's DONE (modules 0–8 + 4b, all typecheck-clean + smoke-verified)
 
 - [x] **Module 0 — Scaffold.** Electron + electron-vite + React + TypeScript +
       Tailwind. Security hardening (sandbox, contextIsolation, CSP). Build,
@@ -138,6 +138,15 @@ maestro/
       the CLI (OS keychain / dotfiles); nothing is injected into agent env.
       `CodexHarness.isAvailable()` is now real (binary check) so the panel
       reflects Codex truthfully; its `run()` is still a stub. Smoke: `smoke:m7`.
+- [x] **Module 8 — Persisted review history.** Merge/PR outcomes are recorded to
+      a `review_events` table (`ReviewEventStore`) and surfaced per workspace in
+      the `ReviewBar` beyond the transient outcome banner: a "History" list of
+      prior merges (`branch → base`) and PR links (opened via `openExternal`).
+      `WorktreeManager.mergeWorkspace`/`createPullRequest` record an event on
+      success; `listReviewEvents` reads them newest-first (`rowid` tiebreaks
+      same-millisecond events). History survives engine restart and workspace
+      archive (the workspace row is retained). Smoke: `smoke:m8` (record + PR
+      ordering + persist-across-reopen + survive-archive + unknown-id throws).
 - [x] **Module 7b — Headless/CI token fallback (opt-in).** An "Advanced" section
       per agent in the Accounts panel accepts a pasted token/API key for machines
       that can't run interactive OAuth. Stored encrypted via Electron
@@ -180,9 +189,9 @@ maestro/
       ⚠️ The Codex harness was built against the *documented* `exec --json`
       thread-event format — verify the live two-turn `smoke:m8` against a real
       `codex` install (resume id + usage fields especially) before relying on it.
-- [ ] **Persisted PR/merge history & richer review UX** (nice-to-have): show prior
-      merge outcomes / open PR links per workspace beyond the transient `ReviewBar`
-      outcome banner.
+- [ ] **Richer review UX** (nice-to-have, building on Module 11's persisted review
+      history): filter or group history across workspaces, show merge commit SHAs,
+      and surface PR open/merged state by polling `gh`.
 
 ---
 

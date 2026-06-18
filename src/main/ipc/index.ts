@@ -160,6 +160,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const { id } = WorkspaceIdInputSchema.parse(raw)
     return engine.worktrees.getReviewStatus(id)
   })
+  handle(IpcChannels.workspaceReviewHistory, (raw) => {
+    const { id } = WorkspaceIdInputSchema.parse(raw)
+    return engine.worktrees.listReviewEvents(id)
+  })
   handle(IpcChannels.workspaceCommit, (raw) => {
     const { id, message } = CommitWorkspaceInputSchema.parse(raw)
     return engine.worktrees.commitWorkspace(id, message)

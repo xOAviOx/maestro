@@ -12,14 +12,15 @@ helps ship it.
 
 The core is built and verified: scaffold, orchestration engine, harness layer
 (Claude Code + Codex), workspace supervisor, UI shell, Monaco diff viewer,
-merge/PR/archive, a raw terminal per workspace (node-pty + xterm), and agent
-accounts (CLI login from Settings → Accounts).
+merge/PR/archive, a raw terminal per workspace (node-pty + xterm), agent
+accounts (CLI login from Settings → Accounts), and persisted review history
+(prior merges + PR links per workspace, surfaced in the ReviewBar).
 
 On top of that, four workflow features round out the "run many, ship one" loop:
 **fan-out**, a **task queue**, a per-repo **test runner**, and a side-by-side
 **comparison view** (see [Features](#features) below).
 
-Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m10` plus
+Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m11` plus
 `smoke:m4b` (run `npm run rebuild:node` first — see ABI note below; `smoke:m4b`
 and `smoke:m7` work on either ABI — node-pty ships N-API prebuilds and the auth
 probes don't touch the DB).

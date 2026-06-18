@@ -13,6 +13,7 @@ import type {
   QueuedJob,
   RepoInfo,
   RepoRecord,
+  ReviewEvent,
   ReviewStatus,
   TerminalDataEvent,
   TerminalExitEvent,
@@ -52,6 +53,7 @@ export const IpcChannels = {
   workspaceDiff: 'maestro:workspace:diff',
   workspaceFileDiff: 'maestro:workspace:fileDiff',
   workspaceReviewStatus: 'maestro:workspace:reviewStatus',
+  workspaceReviewHistory: 'maestro:workspace:reviewHistory',
   workspaceCommit: 'maestro:workspace:commit',
   workspaceMerge: 'maestro:workspace:merge',
   workspaceCreatePr: 'maestro:workspace:createPr',
@@ -123,6 +125,8 @@ export interface MaestroApi {
   getDiff(id: string): Promise<WorkspaceDiff>
   getFileDiff(id: string, path: string, oldPath?: string): Promise<FileDiff>
   getReviewStatus(id: string): Promise<ReviewStatus>
+  /** Persisted history of merge/PR outcomes for a workspace (newest first). */
+  listReviewHistory(id: string): Promise<ReviewEvent[]>
   commitWorkspace(id: string, message: string): Promise<boolean>
   mergeWorkspace(
     id: string,

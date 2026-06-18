@@ -66,6 +66,24 @@ function migrate(db: Db): void {
       ciphertext  BLOB NOT NULL,
       updated_at  TEXT NOT NULL
     );
+
+    -- Append-only history of review outcomes (merges + PRs) per workspace, so the
+    -- UI can show prior results beyond the transient ReviewBar banner. Rows are
+    -- kept after a workspace is archived (the workspace row itself is retained,
+    -- only flagged archived), so history survives the worktree being removed.
+    CREATE TABLE IF NOT EXISTS review_events (
+      id           TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      repo_path    TEXT NOT NULL,
+      kind         TEXT NOT NULL,            -- 'merge' | 'pr'
+      base_branch  TEXT NOT NULL,
+      branch       TEXT NOT NULL,
+      url          TEXT,                     -- PR url; null for merges
+      committed    INTEGER NOT NULL DEFAULT 0,
+      created_at   TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_review_ws ON review_events (workspace_id);
   `)
 
   // Additive column migrations (idempotent): add only if the column is absent,

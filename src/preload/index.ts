@@ -49,6 +49,8 @@ const api: MaestroApi = {
   getFileDiff: (id: string, path: string, oldPath?: string) =>
     ipcRenderer.invoke(IpcChannels.workspaceFileDiff, { id, path, oldPath }),
   getReviewStatus: (id: string) => ipcRenderer.invoke(IpcChannels.workspaceReviewStatus, { id }),
+  listReviewHistory: (id: string) =>
+    ipcRenderer.invoke(IpcChannels.workspaceReviewHistory, { id }),
   commitWorkspace: (id: string, message: string) =>
     ipcRenderer.invoke(IpcChannels.workspaceCommit, { id, message }),
   mergeWorkspace: (id: string, options?: { commitMessage?: string; archiveAfter?: boolean }) =>

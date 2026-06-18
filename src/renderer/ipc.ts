@@ -11,6 +11,7 @@ import {
   QueuedJobSchema,
   RepoInfoSchema,
   RepoRecordSchema,
+  ReviewEventSchema,
   ReviewStatusSchema,
   TerminalDataEventSchema,
   TerminalExitEventSchema,
@@ -35,6 +36,7 @@ import {
   type QueuedJob,
   type RepoInfo,
   type RepoRecord,
+  type ReviewEvent,
   type ReviewStatus,
   type TerminalDataEvent,
   type TerminalExitEvent,
@@ -134,6 +136,8 @@ export const ipc = {
     call(window.maestro.getFileDiff(id, path, oldPath), FileDiffSchema),
   getReviewStatus: (id: string): Promise<ReviewStatus> =>
     call(window.maestro.getReviewStatus(id), ReviewStatusSchema),
+  listReviewHistory: (id: string): Promise<ReviewEvent[]> =>
+    call(window.maestro.listReviewHistory(id), z.array(ReviewEventSchema)),
   commitWorkspace: (id: string, message: string): Promise<boolean> =>
     call(window.maestro.commitWorkspace(id, message), z.boolean()),
   mergeWorkspace: (

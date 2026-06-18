@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ipc, MaestroClientError } from '../ipc'
 import { useStore } from '../store'
-import type { ReviewStatus, Workspace } from '@shared/types'
+import type { ReviewEvent, ReviewStatus, Workspace } from '@shared/types'
 import { Button } from './ui/Button'
 import { Icon } from './ui/Icon'
+
+/** Short local timestamp for a history row, e.g. "Jun 18, 2:31 PM". */
+function formatEventTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  })
+}
 
 type Outcome =
   | { kind: 'merged'; base: string }
@@ -22,6 +34,7 @@ export function ReviewBar({ workspace }: { workspace: Workspace }): JSX.Element 
   const pushToast = useStore((s) => s.pushToast)
 
   const [review, setReview] = useState<ReviewStatus | null>(null)
+  const [history, setHistory] = useState<ReviewEvent[]>([])
   const [busy, setBusy] = useState(false)
   const [archiveAfter, setArchiveAfter] = useState(true)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
@@ -34,9 +47,18 @@ export function ReviewBar({ workspace }: { workspace: Workspace }): JSX.Element 
     }
   }, [workspace.id])
 
+  const loadHistory = useCallback(async () => {
+    try {
+      setHistory(await ipc.listReviewHistory(workspace.id))
+    } catch {
+      setHistory([])
+    }
+  }, [workspace.id])
+
   useEffect(() => {
     void loadReview()
-  }, [loadReview, workspace.status])
+    void loadHistory()
+  }, [loadReview, loadHistory, workspace.status])
 
   const conflictDetails = (err: unknown): string[] | null => {
     if (err instanceof MaestroClientError && err.code === 'MERGE_CONFLICT') {
@@ -61,6 +83,7 @@ export function ReviewBar({ workspace }: { workspace: Workspace }): JSX.Element 
     } finally {
       setBusy(false)
       void loadReview()
+      void loadHistory()
     }
   }
 
@@ -77,6 +100,7 @@ export function ReviewBar({ workspace }: { workspace: Workspace }): JSX.Element 
     } finally {
       setBusy(false)
       void loadReview()
+      void loadHistory()
     }
   }
 
@@ -157,6 +181,45 @@ export function ReviewBar({ workspace }: { workspace: Workspace }): JSX.Element 
             </div>
           )}
           {outcome.kind === 'error' && <span className="text-status-error">{outcome.message}</span>}
+        </div>
+      )}
+
+      {history.length > 0 && (
+        <div className="mt-2 border-t border-slate-800/60 pt-2">
+          <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">
+            History
+          </div>
+          <ul className="mt-1 space-y-0.5 text-xs">
+            {history.map((e) => (
+              <li key={e.id} className="flex items-baseline gap-2">
+                <span className="shrink-0 font-mono text-[11px] text-slate-600">
+                  {formatEventTime(e.createdAt)}
+                </span>
+                {e.kind === 'merge' ? (
+                  <span className="text-slate-400">
+                    <span className="text-status-done">✓ Merged</span>{' '}
+                    <span className="font-mono">{e.branch}</span> →{' '}
+                    <span className="font-mono">{e.baseBranch}</span>
+                  </span>
+                ) : (
+                  <span className="min-w-0 text-slate-400">
+                    ↗ PR{' '}
+                    {e.url ? (
+                      <button
+                        className="truncate align-bottom underline hover:text-slate-200"
+                        onClick={() => void ipc.openExternal(e.url ?? '')}
+                        title={e.url}
+                      >
+                        {e.url}
+                      </button>
+                    ) : (
+                      <span className="font-mono">{e.branch}</span>
+                    )}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>

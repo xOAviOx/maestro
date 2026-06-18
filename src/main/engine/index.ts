@@ -2,6 +2,7 @@ import { openDatabase, type Db } from './store/Database'
 import { RepoStore } from './store/RepoStore'
 import { WorkspaceStore } from './store/WorkspaceStore'
 import { CredentialStore, type SecretCipher } from './store/CredentialStore'
+import { ReviewEventStore } from './store/ReviewEventStore'
 import { GitService } from './GitService'
 import { WorktreeManager } from './WorktreeManager'
 import { TestRunner } from './TestRunner'
@@ -18,6 +19,7 @@ export interface Engine {
   worktrees: WorktreeManager
   credentials: CredentialStore
   tests: TestRunner
+  reviewEvents: ReviewEventStore
   close(): void
 }
 
@@ -49,7 +51,8 @@ export function createEngine(options: EngineOptions | string = {}): Engine {
   const git = new GitService()
   const repos = new RepoStore(db)
   const workspaces = new WorkspaceStore(db)
-  const worktrees = new WorktreeManager(git, repos, workspaces)
+  const reviewEvents = new ReviewEventStore(db)
+  const worktrees = new WorktreeManager(git, repos, workspaces, reviewEvents)
   const credentials = new CredentialStore(db, opts.cipher ?? NULL_CIPHER)
   const tests = new TestRunner(workspaces, repos)
   return {
@@ -60,6 +63,7 @@ export function createEngine(options: EngineOptions | string = {}): Engine {
     worktrees,
     credentials,
     tests,
+    reviewEvents,
     close: () => db.close()
   }
 }
@@ -70,5 +74,6 @@ export { TestRunner } from './TestRunner'
 export { RepoStore } from './store/RepoStore'
 export { WorkspaceStore } from './store/WorkspaceStore'
 export { CredentialStore } from './store/CredentialStore'
+export { ReviewEventStore } from './store/ReviewEventStore'
 export type { SecretCipher } from './store/CredentialStore'
 export { openDatabase } from './store/Database'
