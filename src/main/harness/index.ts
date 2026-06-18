@@ -29,6 +29,7 @@ export type { Harness, LaunchOptions } from './Harness'
 export { ClaudeCodeHarness } from './ClaudeCodeHarness'
 export type { ClaudeCodeHarnessOptions, ClaudePermissionMode } from './ClaudeCodeHarness'
 export { CodexHarness } from './CodexHarness'
+export type { CodexHarnessOptions, CodexSandboxMode } from './CodexHarness'
 export { CursorHarness } from './CursorHarness'
 export {
   getAgentAuthStatus,
