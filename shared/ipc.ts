@@ -109,6 +109,9 @@ export interface MaestroApi {
 
   // --- workspaces ---
   createWorkspace(input: CreateWorkspaceInput): Promise<Workspace>
+  /** Launch one task as N competing variants (fan-out). Returns the variant
+   * workspaces; their first turns are started automatically by main. */
+  fanOut(input: FanOutInput): Promise<Workspace[]>
   listWorkspaces(repoPath: string): Promise<Workspace[]>
   listAllWorkspaces(): Promise<Workspace[]>
   getWorkspace(id: string): Promise<Workspace>
@@ -125,12 +128,22 @@ export interface MaestroApi {
     options?: { title?: string; body?: string; commitMessage?: string }
   ): Promise<PullRequestResult>
   archiveWorkspace(id: string, force?: boolean): Promise<void>
+  /** Archive every other (non-archived) variant in this workspace's fan-out
+   * group, keeping only `id`. No-op if the workspace isn't part of a group. */
+  archiveSiblings(id: string): Promise<void>
 
   // --- agents ---
   /** Start an agent turn. Resolves immediately (ack); progress arrives via
    * onWorkspaceEvent. */
   startAgent(workspaceId: string, prompt: string, model?: string): Promise<void>
   cancelAgent(workspaceId: string): Promise<void>
+  /** Enqueue an agent turn. Runs FIFO when its workspace is free and its
+   * dependency (if any) has finished. Returns the created job. */
+  enqueueJob(input: EnqueueJobInput): Promise<QueuedJob>
+  /** The current pending-job queue (also pushed via onWorkspaceEvent). */
+  listQueue(): Promise<QueuedJob[]>
+  /** Remove a pending job from the queue (no effect once it has started). */
+  cancelJob(jobId: string): Promise<void>
   isAgentAvailable(agentType: AgentType): Promise<boolean>
   /** Detect whether an agent's CLI is installed and logged in. */
   getAgentAuthStatus(agentType: AgentType): Promise<AgentAuthStatus>
