@@ -185,6 +185,101 @@ export class WorkspaceSupervisor {
     }
   }
 
+  // --- queue ----------------------------------------------------------------
+
+  /** The current pending-job queue (a copy). */
+  listQueue(): QueuedJob[] {
+    return [...this.queue]
+  }
+
+  /**
+   * Enqueue an agent turn. Validates the workspace exists, appends the job, and
+   * immediately tries to run it (pump). Returns the created job. The job runs
+   * FIFO once its workspace is free and its dependency (if any) has finished.
+   */
+  async enqueue(input: EnqueueJobInput): Promise<QueuedJob> {
+    await this.engine.worktrees.getWorkspace(input.workspaceId) // throws if missing
+    const job: QueuedJob = {
+      id: randomUUID(),
+      workspaceId: input.workspaceId,
+      prompt: input.prompt,
+      ...(input.model ? { model: input.model } : {}),
+      dependsOnWorkspaceId: input.dependsOnWorkspaceId ?? null,
+      createdAt: new Date().toISOString()
+    }
+    this.queue.push(job)
+    log.info('supervisor.enqueued', {
+      jobId: job.id,
+      workspaceId: job.workspaceId,
+      dependsOn: job.dependsOnWorkspaceId
+    })
+    this.emitQueue()
+    this.pump()
+    return job
+  }
+
+  /** Remove a pending job. No effect once it has started (it's already off the queue). */
+  cancelJob(jobId: string): void {
+    const before = this.queue.length
+    this.queue = this.queue.filter((j) => j.id !== jobId)
+    if (this.queue.length !== before) {
+      log.info('supervisor.job-cancelled', { jobId })
+      this.emitQueue()
+    }
+  }
+
+  /**
+   * Start every job that is currently runnable. A job is runnable when:
+   *   - its workspace has no active run, AND
+   *   - its dependency is satisfied: no dependsOnWorkspaceId, OR that workspace
+   *     is not active, has no pending job ahead of it, and finished in a
+   *     non-error terminal state (awaiting_input | done).
+   * If a dependency ended in `error`, the dependent job is dropped (its
+   * pipeline can't proceed) rather than waiting forever.
+   *
+   * Scans FIFO and may start several independent jobs in one pass. Safe to call
+   * often (enqueue, run completion); it only ever starts runnable jobs.
+   */
+  private pump(): void {
+    let madeProgress = true
+    while (madeProgress) {
+      madeProgress = false
+      for (const job of this.queue) {
+        if (this.active.has(job.workspaceId) || this.starting.has(job.workspaceId)) continue
+
+        if (job.dependsOnWorkspaceId) {
+          const dep = job.dependsOnWorkspaceId
+          if (this.active.has(dep) || this.starting.has(dep)) continue // dep still busy — wait
+          if (this.queue.some((j) => j.workspaceId === dep)) continue // dep has queued work
+          const depWs = this.engine.workspaces.getById(dep)
+          const depStatus = depWs?.status
+          if (depStatus === 'error') {
+            // Dependency failed: drop the dependent job so it doesn't hang.
+            log.warn('supervisor.job-dropped-dep-error', { jobId: job.id, dep })
+            this.queue = this.queue.filter((j) => j.id !== job.id)
+            this.emitQueue()
+            madeProgress = true
+            break
+          }
+          if (depStatus !== 'awaiting_input' && depStatus !== 'done') continue
+        }
+
+        // Runnable: remove from queue and start. startRun reserves the workspace
+        // synchronously (this.starting) so the re-scan won't double-start it.
+        this.queue = this.queue.filter((j) => j.id !== job.id)
+        this.emitQueue()
+        void this.startRun(job.workspaceId, job.prompt, job.model).catch((err) => {
+          log.warn('supervisor.queued-start-failed', {
+            jobId: job.id,
+            message: toMaestroError(err).message
+          })
+        })
+        madeProgress = true
+        break // queue mutated; re-scan from the top
+      }
+    }
+  }
+
   // --- internals ---
 
   private setStatus(workspaceId: string, status: WorkspaceStatus): void {
@@ -200,5 +295,10 @@ export class WorkspaceSupervisor {
         log.error('supervisor.listener-threw', { message: String(err) })
       }
     }
+  }
+
+  /** Broadcast the current pending queue to subscribers. */
+  private emitQueue(): void {
+    this.emit({ type: 'queue_changed', jobs: this.listQueue() })
   }
 }
