@@ -135,6 +135,30 @@ export const CreateWorkspaceInputSchema = z.object({
 // it in at parse time). Internally createWorkspace parses to the resolved shape.
 export type CreateWorkspaceInput = z.input<typeof CreateWorkspaceInputSchema>
 
+/**
+ * Fan-out: launch one task as N competing variants, each in its own worktree.
+ * Variants differ by agent + (optional) model, so you can race e.g. two Claude
+ * models, or Claude vs Codex, on the same prompt and keep the winner. The
+ * variants array is bounded (2–5) to keep concurrent agent load sane.
+ */
+export const FanOutVariantSchema = z.object({
+  agentType: AgentTypeSchema,
+  /** Optional per-variant model override passed to that variant's agent. */
+  model: z.string().optional()
+})
+export type FanOutVariant = z.infer<typeof FanOutVariantSchema>
+
+export const FanOutInputSchema = z.object({
+  repoPath: z.string().min(1),
+  name: z.string().min(1),
+  /** Defaults to the repo's detected default base branch when omitted. */
+  baseBranch: z.string().optional(),
+  /** The shared task sent to every variant's first turn. */
+  prompt: z.string().min(1),
+  variants: z.array(FanOutVariantSchema).min(2).max(5)
+})
+export type FanOutInput = z.infer<typeof FanOutInputSchema>
+
 export const DIFF_FILE_STATUSES = [
   'added',
   'modified',
