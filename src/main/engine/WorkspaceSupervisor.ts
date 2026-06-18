@@ -1,12 +1,23 @@
+import { randomUUID } from 'crypto'
 import { createHarness, type ClaudeCodeHarnessOptions, type Harness } from '../harness'
 import { credentialEnvVar } from '../harness'
 import { log } from '../log'
 import { MaestroError, toMaestroError } from './errors'
 import type { Engine } from './index'
-import type { AgentType, WorkspacePushEvent, WorkspaceStatus } from '@shared/types'
+import type {
+  AgentType,
+  EnqueueJobInput,
+  QueuedJob,
+  WorkspacePushEvent,
+  WorkspaceStatus
+} from '@shared/types'
 
 /** A push-event listener (the IPC layer subscribes one that broadcasts to windows). */
 export type SupervisorListener = (evt: WorkspacePushEvent) => void
+
+/** Builds a Harness for an agent type. Injectable so tests can swap in a fake
+ * that completes instantly without a live CLI. Defaults to createHarness. */
+export type HarnessFactory = (type: AgentType, opts?: ClaudeCodeHarnessOptions) => Harness
 
 interface RunHandle {
   harness: Harness
@@ -31,13 +42,25 @@ interface RunHandle {
 export class WorkspaceSupervisor {
   private readonly engine: Engine
   private readonly harnessOptions: ClaudeCodeHarnessOptions | undefined
+  private readonly makeHarness: HarnessFactory
   private readonly active = new Map<string, RunHandle>()
   private readonly cancelRequested = new Set<string>()
+  /** Workspaces whose startRun has been dispatched but not yet marked active
+   * (it awaits getWorkspace first). Guards the pump against double-starting a
+   * workspace's sequential jobs in the same synchronous scan. */
+  private readonly starting = new Set<string>()
   private readonly listeners = new Set<SupervisorListener>()
+  /** Pending jobs, FIFO. In-memory for the session (not yet persisted). */
+  private queue: QueuedJob[] = []
 
-  constructor(engine: Engine, harnessOptions?: ClaudeCodeHarnessOptions) {
+  constructor(
+    engine: Engine,
+    harnessOptions?: ClaudeCodeHarnessOptions,
+    harnessFactory: HarnessFactory = createHarness
+  ) {
     this.engine = engine
     this.harnessOptions = harnessOptions
+    this.makeHarness = harnessFactory
   }
 
   subscribe(listener: SupervisorListener): () => void {
@@ -53,7 +76,7 @@ export class WorkspaceSupervisor {
 
   /** True if the named agent CLI is available on this machine. */
   async isAgentAvailable(agentType: Harness['type']): Promise<boolean> {
-    return createHarness(agentType, this.harnessOptions).isAvailable()
+    return this.makeHarness(agentType, this.harnessOptions).isAvailable()
   }
 
   /**
