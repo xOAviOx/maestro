@@ -5,6 +5,8 @@ import type {
   AgentType,
   CredentialKind,
   CreateWorkspaceInput,
+  EnqueueJobInput,
+  FanOutInput,
   TerminalDataEvent,
   TerminalExitEvent,
   WorkspacePushEvent
@@ -37,6 +39,7 @@ const api: MaestroApi = {
   // workspaces
   createWorkspace: (input: CreateWorkspaceInput) =>
     ipcRenderer.invoke(IpcChannels.workspaceCreate, input),
+  fanOut: (input: FanOutInput) => ipcRenderer.invoke(IpcChannels.workspaceFanOut, input),
   listWorkspaces: (repoPath: string) => ipcRenderer.invoke(IpcChannels.workspaceList, { repoPath }),
   listAllWorkspaces: () => ipcRenderer.invoke(IpcChannels.workspaceListAll),
   getWorkspace: (id: string) => ipcRenderer.invoke(IpcChannels.workspaceGet, { id }),
@@ -54,12 +57,17 @@ const api: MaestroApi = {
   ) => ipcRenderer.invoke(IpcChannels.workspaceCreatePr, { id, ...options }),
   archiveWorkspace: (id: string, force?: boolean) =>
     ipcRenderer.invoke(IpcChannels.workspaceArchive, { id, force }),
+  archiveSiblings: (id: string) =>
+    ipcRenderer.invoke(IpcChannels.workspaceArchiveSiblings, { id }),
 
   // agents
   startAgent: (workspaceId: string, prompt: string, model?: string) =>
     ipcRenderer.invoke(IpcChannels.agentStart, { workspaceId, prompt, model }),
   cancelAgent: (workspaceId: string) =>
     ipcRenderer.invoke(IpcChannels.agentCancel, { id: workspaceId }),
+  enqueueJob: (input: EnqueueJobInput) => ipcRenderer.invoke(IpcChannels.agentEnqueue, input),
+  listQueue: () => ipcRenderer.invoke(IpcChannels.agentQueueList),
+  cancelJob: (jobId: string) => ipcRenderer.invoke(IpcChannels.agentJobCancel, { id: jobId }),
   isAgentAvailable: (agentType: AgentType) =>
     ipcRenderer.invoke(IpcChannels.agentIsAvailable, { agentType }),
   getAgentAuthStatus: (agentType: AgentType) =>
