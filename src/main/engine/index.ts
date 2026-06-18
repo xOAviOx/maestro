@@ -4,6 +4,7 @@ import { WorkspaceStore } from './store/WorkspaceStore'
 import { CredentialStore, type SecretCipher } from './store/CredentialStore'
 import { GitService } from './GitService'
 import { WorktreeManager } from './WorktreeManager'
+import { TestRunner } from './TestRunner'
 
 /**
  * The engine: git + persistence + worktree orchestration, wired together.
@@ -16,6 +17,7 @@ export interface Engine {
   workspaces: WorkspaceStore
   worktrees: WorktreeManager
   credentials: CredentialStore
+  tests: TestRunner
   close(): void
 }
 
@@ -49,6 +51,7 @@ export function createEngine(options: EngineOptions | string = {}): Engine {
   const workspaces = new WorkspaceStore(db)
   const worktrees = new WorktreeManager(git, repos, workspaces)
   const credentials = new CredentialStore(db, opts.cipher ?? NULL_CIPHER)
+  const tests = new TestRunner(workspaces, repos)
   return {
     db,
     git,
@@ -56,12 +59,14 @@ export function createEngine(options: EngineOptions | string = {}): Engine {
     workspaces,
     worktrees,
     credentials,
+    tests,
     close: () => db.close()
   }
 }
 
 export { GitService } from './GitService'
 export { WorktreeManager } from './WorktreeManager'
+export { TestRunner } from './TestRunner'
 export { RepoStore } from './store/RepoStore'
 export { WorkspaceStore } from './store/WorkspaceStore'
 export { CredentialStore } from './store/CredentialStore'
