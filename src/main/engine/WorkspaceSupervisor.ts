@@ -87,15 +87,25 @@ export class WorkspaceSupervisor {
    * push events + status changes — never thrown from the background loop.
    */
   async startRun(workspaceId: string, prompt: string, model?: string): Promise<void> {
-    const ws = await this.engine.worktrees.getWorkspace(workspaceId)
-    if (this.active.has(workspaceId)) {
+    if (this.active.has(workspaceId) || this.starting.has(workspaceId)) {
       throw new MaestroError('INTERNAL', 'An agent is already running for this workspace.', {
         workspaceId
       })
     }
+    // Reserve synchronously so a concurrent caller / pump scan can't race in
+    // during the await below.
+    this.starting.add(workspaceId)
+    let ws
+    try {
+      ws = await this.engine.worktrees.getWorkspace(workspaceId)
+    } catch (err) {
+      this.starting.delete(workspaceId)
+      throw err
+    }
 
-    const harness = createHarness(ws.agentType, this.harnessOptions)
+    const harness = this.makeHarness(ws.agentType, this.harnessOptions)
     this.active.set(workspaceId, { harness, startedAt: new Date().toISOString() })
+    this.starting.delete(workspaceId)
     this.setStatus(workspaceId, 'running')
 
     const env = this.credentialEnv(ws.agentType)
@@ -153,6 +163,9 @@ export class WorkspaceSupervisor {
     } finally {
       this.cancelRequested.delete(workspaceId)
       this.active.delete(workspaceId)
+      // A run just ended: the next sequential job for this workspace, or any
+      // dependent job now unblocked, may be runnable.
+      this.pump()
     }
   }
 
