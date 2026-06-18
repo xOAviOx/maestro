@@ -4,10 +4,13 @@ import type {
   CreateWorkspaceInput,
   CredentialInfo,
   CredentialKind,
+  EnqueueJobInput,
+  FanOutInput,
   FileDiff,
   MergeResult,
   PingResponse,
   PullRequestResult,
+  QueuedJob,
   RepoInfo,
   RepoRecord,
   ReviewStatus,
@@ -40,6 +43,7 @@ export const IpcChannels = {
 
   // workspaces
   workspaceCreate: 'maestro:workspace:create',
+  workspaceFanOut: 'maestro:workspace:fanOut',
   workspaceList: 'maestro:workspace:list',
   workspaceListAll: 'maestro:workspace:listAll',
   workspaceGet: 'maestro:workspace:get',
@@ -50,6 +54,7 @@ export const IpcChannels = {
   workspaceMerge: 'maestro:workspace:merge',
   workspaceCreatePr: 'maestro:workspace:createPr',
   workspaceArchive: 'maestro:workspace:archive',
+  workspaceArchiveSiblings: 'maestro:workspace:archiveSiblings',
 
   // integrations
   ghAvailable: 'maestro:gh:available',
