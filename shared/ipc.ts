@@ -70,6 +70,9 @@ export const IpcChannels = {
   // agents
   agentStart: 'maestro:agent:start',
   agentCancel: 'maestro:agent:cancel',
+  agentEnqueue: 'maestro:agent:enqueue',
+  agentQueueList: 'maestro:agent:queueList',
+  agentJobCancel: 'maestro:agent:jobCancel',
   agentIsAvailable: 'maestro:agent:isAvailable',
   agentAuthStatus: 'maestro:agent:authStatus',
   agentLoginStart: 'maestro:agent:loginStart',
