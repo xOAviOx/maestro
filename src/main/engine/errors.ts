@@ -104,6 +104,17 @@ export class HarnessUnavailableError extends MaestroError {
   }
 }
 
+export class TestCommandNotConfiguredError extends MaestroError {
+  constructor(repoPath: string) {
+    super(
+      'TEST_COMMAND_NOT_CONFIGURED',
+      'No test command is configured for this repository. Set one in Settings → Repository.',
+      { repoPath }
+    )
+    this.name = 'TestCommandNotConfiguredError'
+  }
+}
+
 /** Normalize any thrown value into a MaestroError. */
 export function toMaestroError(err: unknown): MaestroError {
   if (err instanceof MaestroError) return err
