@@ -24,6 +24,8 @@
     "smoke:m5": "tsx scripts/module5-smoke.ts",
     "smoke:m6": "tsx scripts/module6-smoke.ts",
     "smoke:m7": "tsx scripts/module7-smoke.ts",
+    "smoke:m8": "tsx scripts/module8-smoke.ts",
+    "smoke:m9": "tsx scripts/module9-smoke.ts",
     "rebuild:electron": "electron-rebuild -f -o better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3"
   },
