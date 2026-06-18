@@ -10,6 +10,7 @@ import type {
   QueuedJob,
   RepoInfo,
   RepoRecord,
+  TestResult,
   Workspace,
   WorkspacePushEvent
 } from '@shared/types'
@@ -51,6 +52,10 @@ interface MaestroState {
   chats: Record<string, ChatItem[]>
   /** Pending queued jobs across all workspaces (renderer filters by workspace). */
   queue: QueuedJob[]
+  /** Latest test result per workspace id (session-only, like chats). */
+  testResults: Record<string, TestResult>
+  /** Per-workspace "tests running" flag, so variants can run independently. */
+  testRunning: Record<string, boolean>
   claudeAvailable: boolean
   ghAvailable: boolean
   /** Per-agent install + login state, shown in the Accounts settings panel. */
@@ -81,6 +86,9 @@ interface MaestroState {
     variants: FanOutVariant[]
   ) => Promise<void>
   archiveSiblings: (workspaceId: string) => Promise<void>
+  setTestCommand: (repoPath: string, testCommand: string) => Promise<void>
+  runTests: (workspaceId: string) => Promise<void>
+  runTestsForGroup: (workspaceIds: string[]) => Promise<void>
   selectWorkspace: (id: string) => void
   sendPrompt: (workspaceId: string, prompt: string) => Promise<void>
   enqueueJob: (workspaceId: string, prompt: string, dependsOnWorkspaceId?: string) => Promise<void>
@@ -99,6 +107,8 @@ export const useStore = create<MaestroState>((set, get) => ({
   selectedWorkspaceId: null,
   chats: {},
   queue: [],
+  testResults: {},
+  testRunning: {},
   claudeAvailable: false,
   ghAvailable: false,
   agentAuth: {
@@ -237,6 +247,36 @@ export const useStore = create<MaestroState>((set, get) => ({
     } finally {
       set({ loading: false })
     }
+  },
+
+  setTestCommand: async (repoPath, testCommand) => {
+    try {
+      await ipc.setTestCommand(repoPath, testCommand)
+      // Reflect the change without a full reload.
+      const repoInfo = await ipc.getRepoInfo(repoPath)
+      set((s) => ({
+        repoInfo: s.activeRepoPath === repoPath ? repoInfo : s.repoInfo,
+        repos: s.repos.map((r) => (r.path === repoPath ? { ...r, testCommand: repoInfo.testCommand } : r))
+      }))
+    } catch (err) {
+      set({ error: errMessage(err) })
+    }
+  },
+
+  runTests: async (workspaceId) => {
+    set((s) => ({ testRunning: { ...s.testRunning, [workspaceId]: true } }))
+    try {
+      const result = await ipc.runTests(workspaceId)
+      set((s) => ({ testResults: { ...s.testResults, [workspaceId]: result } }))
+    } catch (err) {
+      set({ error: errMessage(err) })
+    } finally {
+      set((s) => ({ testRunning: { ...s.testRunning, [workspaceId]: false } }))
+    }
+  },
+
+  runTestsForGroup: async (workspaceIds) => {
+    await Promise.all(workspaceIds.map((id) => get().runTests(id)))
   },
 
   refreshAgentAuth: async () => {
