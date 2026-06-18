@@ -15,6 +15,7 @@ import {
   TerminalDataEventSchema,
   TerminalExitEventSchema,
   TerminalStartResultSchema,
+  TestResultSchema,
   WorkspaceDiffSchema,
   WorkspacePushEventSchema,
   WorkspaceSchema,
@@ -38,6 +39,7 @@ import {
   type TerminalDataEvent,
   type TerminalExitEvent,
   type TerminalStartResult,
+  type TestResult,
   type Workspace,
   type WorkspaceDiff,
   type WorkspacePushEvent
@@ -112,6 +114,8 @@ export const ipc = {
     call(window.maestro.getRepoInfo(repoPath), RepoInfoSchema),
   setFilesToCopy: (repoPath: string, patterns: string[]): Promise<void> =>
     callVoid(window.maestro.setFilesToCopy(repoPath, patterns)),
+  setTestCommand: (repoPath: string, testCommand: string): Promise<void> =>
+    callVoid(window.maestro.setTestCommand(repoPath, testCommand)),
 
   // workspaces
   createWorkspace: (input: CreateWorkspaceInput): Promise<Workspace> =>
@@ -145,6 +149,8 @@ export const ipc = {
     callVoid(window.maestro.archiveWorkspace(id, force)),
   archiveSiblings: (id: string): Promise<void> =>
     callVoid(window.maestro.archiveSiblings(id)),
+  runTests: (id: string): Promise<TestResult> =>
+    call(window.maestro.runTests(id), TestResultSchema),
 
   // agents
   startAgent: (workspaceId: string, prompt: string, model?: string): Promise<void> =>
