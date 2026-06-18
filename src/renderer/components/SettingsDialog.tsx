@@ -93,6 +93,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): JSX.Elemen
               Maestro runs each agent through its own CLI login — your subscription stays with the
               provider and no tokens are stored here.
             </p>
+            <RepoSettings />
             {AGENT_TYPES.map((t) => (
               <AccountRow
                 key={t}
@@ -285,4 +286,64 @@ function StatusChip({
     cls = 'bg-amber-900/50 text-amber-300'
   }
   return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>
+}
+
+/**
+ * Per-repo settings — currently the test command run inside each workspace's
+ * worktree (used by the Run-tests control and the variant comparison view).
+ */
+function RepoSettings(): JSX.Element | null {
+  const repoInfo = useStore((s) => s.repoInfo)
+  const activeRepoPath = useStore((s) => s.activeRepoPath)
+  const setTestCommand = useStore((s) => s.setTestCommand)
+
+  const [value, setValue] = useState(repoInfo?.testCommand ?? '')
+  const [saved, setSaved] = useState(false)
+
+  if (!activeRepoPath || !repoInfo) {
+    return (
+      <div className="rounded-md border border-slate-700 bg-slate-950 px-4 py-3 text-xs text-slate-500">
+        Open a repository to configure its test command.
+      </div>
+    )
+  }
+
+  const dirty = value !== (repoInfo.testCommand ?? '')
+
+  const save = async (): Promise<void> => {
+    await setTestCommand(activeRepoPath, value.trim())
+    setSaved(true)
+    setTimeout(() => setSaved(false), 1500)
+  }
+
+  return (
+    <div className="rounded-md border border-slate-700 bg-slate-950 px-4 py-3">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="font-medium">Repository — {repoInfo.name}</span>
+      </div>
+      <label className="mb-1 block text-xs text-slate-400">Test command</label>
+      <div className="flex gap-2">
+        <input
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs outline-none focus:border-slate-500"
+          placeholder="e.g. pnpm lint && pnpm test"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void save()
+          }}
+        />
+        <button
+          className="shrink-0 rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+          onClick={() => void save()}
+          disabled={!dirty}
+        >
+          {saved ? 'Saved' : 'Save'}
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-slate-500">
+        Runs in each workspace&apos;s worktree via your shell. Leave empty to disable. Used by
+        &ldquo;Run tests&rdquo; and the fan-out comparison view.
+      </p>
+    </div>
+  )
 }
