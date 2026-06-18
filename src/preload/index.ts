@@ -35,6 +35,8 @@ const api: MaestroApi = {
   getRepoInfo: (repoPath: string) => ipcRenderer.invoke(IpcChannels.repoGetInfo, { repoPath }),
   setFilesToCopy: (repoPath: string, patterns: string[]) =>
     ipcRenderer.invoke(IpcChannels.repoSetFilesToCopy, { repoPath, patterns }),
+  setTestCommand: (repoPath: string, testCommand: string) =>
+    ipcRenderer.invoke(IpcChannels.repoSetTestCommand, { repoPath, testCommand }),
 
   // workspaces
   createWorkspace: (input: CreateWorkspaceInput) =>
@@ -59,6 +61,7 @@ const api: MaestroApi = {
     ipcRenderer.invoke(IpcChannels.workspaceArchive, { id, force }),
   archiveSiblings: (id: string) =>
     ipcRenderer.invoke(IpcChannels.workspaceArchiveSiblings, { id }),
+  runTests: (id: string) => ipcRenderer.invoke(IpcChannels.workspaceRunTests, { id }),
 
   // agents
   startAgent: (workspaceId: string, prompt: string, model?: string) =>
