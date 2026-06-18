@@ -303,6 +303,32 @@ export const useStore = create<MaestroState>((set, get) => ({
     }
   },
 
+  enqueueJob: async (workspaceId, prompt, dependsOnWorkspaceId) => {
+    // Show the queued prompt in the transcript so the user sees what they lined up.
+    set((s) => ({
+      chats: {
+        ...s.chats,
+        [workspaceId]: [
+          ...(s.chats[workspaceId] ?? []),
+          { id: nextId(), at: new Date().toISOString(), source: 'user', text: prompt }
+        ]
+      }
+    }))
+    try {
+      await ipc.enqueueJob({ workspaceId, prompt, dependsOnWorkspaceId })
+    } catch (err) {
+      set({ error: errMessage(err) })
+    }
+  },
+
+  cancelJob: async (jobId) => {
+    try {
+      await ipc.cancelJob(jobId)
+    } catch (err) {
+      set({ error: errMessage(err) })
+    }
+  },
+
   archiveWorkspace: async (id) => {
     set({ loading: true, error: null })
     try {
@@ -323,6 +349,10 @@ export const useStore = create<MaestroState>((set, get) => ({
   clearError: () => set({ error: null }),
 
   _handlePush: (evt) => {
+    if (evt.type === 'queue_changed') {
+      set({ queue: evt.jobs })
+      return
+    }
     if (evt.type === 'status_changed') {
       set((s) => ({
         workspaces: s.workspaces.map((w) =>
