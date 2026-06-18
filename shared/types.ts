@@ -24,6 +24,7 @@ export const MAESTRO_ERROR_CODES = [
   'GH_UNAVAILABLE',
   'HARNESS_NOT_CONFIGURED',
   'HARNESS_UNAVAILABLE',
+  'TEST_COMMAND_NOT_CONFIGURED',
   'INTERNAL'
 ] as const
 export const MaestroErrorCodeSchema = z.enum(MAESTRO_ERROR_CODES)
@@ -113,6 +114,10 @@ export const RepoRecordSchema = z.object({
   /** Glob patterns for gitignored files to copy into each new worktree
    * (e.g. ".env.local") so agents' dev servers can boot. */
   filesToCopy: z.array(z.string()),
+  /** Per-repo test/lint command run inside a workspace's worktree (e.g.
+   * "pnpm test"). Null when not configured. Runs via the shell, so `&&`,
+   * pipes, etc. are allowed. */
+  testCommand: z.string().nullable(),
   addedAt: z.string()
 })
 export type RepoRecord = z.infer<typeof RepoRecordSchema>
@@ -487,3 +492,38 @@ export const TerminalExitEventSchema = z.object({
   exitCode: z.number()
 })
 export type TerminalExitEvent = z.infer<typeof TerminalExitEventSchema>
+
+// ---------------------------------------------------------------------------
+// Module 10 — in-worktree test runner
+// ---------------------------------------------------------------------------
+
+/**
+ * The captured outcome of running a repo's configured test/lint command inside a
+ * workspace's worktree. Session-only (not persisted); the renderer keeps the
+ * latest result per workspace. `output` is combined stdout+stderr, clipped to a
+ * cap (tail kept, where failures print) with `truncated` set when clipped.
+ */
+export const TestResultSchema = z.object({
+  /** True iff the command exited 0 and did not time out. */
+  ok: z.boolean(),
+  /** Process exit code; -1 when killed by timeout or failed to spawn. */
+  exitCode: z.number(),
+  output: z.string(),
+  truncated: z.boolean(),
+  timedOut: z.boolean(),
+  durationMs: z.number(),
+  /** The command string that ran (so the UI can show "ran: pnpm test"). */
+  command: z.string(),
+  ranAt: z.string()
+})
+export type TestResult = z.infer<typeof TestResultSchema>
+
+export const RunTestsInputSchema = z.object({ id: z.string().min(1) })
+export type RunTestsInput = z.infer<typeof RunTestsInputSchema>
+
+export const SetTestCommandInputSchema = z.object({
+  repoPath: z.string().min(1),
+  /** Empty string clears the configured command (normalized to null in main). */
+  testCommand: z.string()
+})
+export type SetTestCommandInput = z.infer<typeof SetTestCommandInputSchema>
