@@ -254,9 +254,31 @@ export type AgentEvent = z.infer<typeof AgentEventSchema>
 // ---------------------------------------------------------------------------
 
 /**
+ * A queued agent turn. The supervisor runs jobs FIFO; a job becomes runnable
+ * when its workspace is free AND its dependency (if any) has finished. This one
+ * shape covers both queue modes:
+ *   - sequential : several jobs on the SAME workspace run one at a time.
+ *   - chaining   : `dependsOnWorkspaceId` makes a job wait for another
+ *                  workspace to finish (pipeline across worktrees/agents).
+ * The pending queue is in-memory for the session (not yet persisted).
+ */
+export const QueuedJobSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  prompt: z.string(),
+  model: z.string().optional(),
+  /** When set, this job waits until that workspace finishes its run. */
+  dependsOnWorkspaceId: z.string().nullable(),
+  createdAt: z.string()
+})
+export type QueuedJob = z.infer<typeof QueuedJobSchema>
+
+/**
  * Events the supervisor pushes to the renderer (via webContents.send). Carries
  * either a normalized agent event or a workspace status change, always tagged
  * with the workspace it belongs to so concurrent runs never get confused.
+ * `queue_changed` carries the full pending-job list (renderer filters by
+ * workspace) so the UI always reflects the live queue.
  */
 export const WorkspacePushEventSchema = z.discriminatedUnion('type', [
   z.object({
@@ -268,6 +290,10 @@ export const WorkspacePushEventSchema = z.discriminatedUnion('type', [
     type: z.literal('status_changed'),
     workspaceId: z.string(),
     status: WorkspaceStatusSchema
+  }),
+  z.object({
+    type: z.literal('queue_changed'),
+    jobs: z.array(QueuedJobSchema)
   })
 ])
 export type WorkspacePushEvent = z.infer<typeof WorkspacePushEventSchema>
