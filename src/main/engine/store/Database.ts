@@ -71,6 +71,7 @@ function migrate(db: Db): void {
   // Additive column migrations (idempotent): add only if the column is absent,
   // so older databases upgrade in place without losing rows.
   addColumnIfMissing(db, 'workspaces', 'group_id', 'TEXT')
+  addColumnIfMissing(db, 'repos', 'test_command', 'TEXT')
 }
 
 /** Add `column` to `table` if it doesn't already exist. SQLite has no
