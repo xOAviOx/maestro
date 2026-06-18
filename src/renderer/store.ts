@@ -6,6 +6,8 @@ import type {
   AgentType,
   CredentialInfo,
   CredentialKind,
+  FanOutVariant,
+  QueuedJob,
   RepoInfo,
   RepoRecord,
   Workspace,
@@ -47,6 +49,8 @@ interface MaestroState {
   workspaces: Workspace[]
   selectedWorkspaceId: string | null
   chats: Record<string, ChatItem[]>
+  /** Pending queued jobs across all workspaces (renderer filters by workspace). */
+  queue: QueuedJob[]
   claudeAvailable: boolean
   ghAvailable: boolean
   /** Per-agent install + login state, shown in the Accounts settings panel. */
@@ -70,8 +74,17 @@ interface MaestroState {
   setCredential: (agentType: AgentType, kind: CredentialKind, secret: string) => Promise<void>
   clearCredential: (agentType: AgentType) => Promise<void>
   createWorkspace: (name: string, baseBranch: string, agentType: AgentType) => Promise<void>
+  fanOut: (
+    name: string,
+    baseBranch: string,
+    prompt: string,
+    variants: FanOutVariant[]
+  ) => Promise<void>
+  archiveSiblings: (workspaceId: string) => Promise<void>
   selectWorkspace: (id: string) => void
   sendPrompt: (workspaceId: string, prompt: string) => Promise<void>
+  enqueueJob: (workspaceId: string, prompt: string, dependsOnWorkspaceId?: string) => Promise<void>
+  cancelJob: (jobId: string) => Promise<void>
   cancelAgent: (workspaceId: string) => Promise<void>
   archiveWorkspace: (id: string) => Promise<void>
   clearError: () => void
@@ -85,6 +98,7 @@ export const useStore = create<MaestroState>((set, get) => ({
   workspaces: [],
   selectedWorkspaceId: null,
   chats: {},
+  queue: [],
   claudeAvailable: false,
   ghAvailable: false,
   agentAuth: {
