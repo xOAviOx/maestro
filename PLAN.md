@@ -149,6 +149,22 @@ maestro/
       (`CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) on top of
       the inherited env. CLI login remains the recommended default. Smoke: `smoke:m7`
       (encrypt-at-rest + reveal + clear + locked-cipher refusal).
+- [x] **Module 8 — Codex harness.** `CodexHarness` drives the Codex CLI in
+      headless structured-output mode (`codex exec --json -s workspace-write
+      --skip-git-repo-check`, prompt piped via stdin; multi-turn continuity via
+      `codex exec resume <sessionId>`), mirroring `ClaudeCodeHarness` (spawn,
+      stream NDJSON, validate every event, cancel/process-tree-kill). Default
+      sandbox is `workspace-write` (analog of Claude's `acceptEdits`);
+      `danger-full-access` is NOT the default (hard constraint).
+      `CodexStreamMapper` normalizes the documented thread-event stream
+      (`thread.started`/`turn.started`/`item.*`/`turn.completed`/`turn.failed`)
+      onto the shared `AgentEvent` union — synthesizing a `tool_use` for
+      completed-only items (`file_change`/`web_search`), ignoring `reasoning`
+      and transient reconnect `error` notices, defending against version field
+      drift (`item.type` vs `item_type`, `agent_message` vs `assistant_message`).
+      The harness factory now returns a real `CodexHarness`; no caller changed.
+      Smoke: `smoke:m8` (deterministic mapper test on a recorded stream + a live
+      two-turn resume test that skips when the `codex` CLI is absent).
 
 ---
 
@@ -157,10 +173,13 @@ maestro/
 - [ ] **macOS signed build.** `electron-builder.yml` has a stubbed mac/`dmg`
       target. Needs a Mac CI runner + signing/notarization. Develop & package on
       Windows first (current target), add mac as a later CI step.
-- [ ] **Additional agent harnesses.** `CodexHarness` / `CursorHarness` `run()`
-      are stubs — flesh out when those CLIs are targeted. Pattern: implement the
-      `Harness` interface + a stream mapper like `ClaudeStreamMapper`. (Install +
-      login detection already works for Codex via Module 7's Accounts panel.)
+- [ ] **Cursor harness.** `CursorHarness.run()` is still a stub — flesh out when
+      that CLI is targeted. Pattern: implement the `Harness` interface + a stream
+      mapper like `ClaudeStreamMapper`/`CodexStreamMapper`. (Codex is now done,
+      Module 8; its mapper is a second reference for the pattern.)
+      ⚠️ The Codex harness was built against the *documented* `exec --json`
+      thread-event format — verify the live two-turn `smoke:m8` against a real
+      `codex` install (resume id + usage fields especially) before relying on it.
 - [ ] **Persisted PR/merge history & richer review UX** (nice-to-have): show prior
       merge outcomes / open PR links per workspace beyond the transient `ReviewBar`
       outcome banner.
