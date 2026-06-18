@@ -314,6 +314,14 @@ export const StartAgentInputSchema = z.object({
 })
 export type StartAgentInput = z.infer<typeof StartAgentInputSchema>
 
+export const EnqueueJobInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  prompt: z.string().min(1),
+  model: z.string().optional(),
+  dependsOnWorkspaceId: z.string().min(1).optional()
+})
+export type EnqueueJobInput = z.infer<typeof EnqueueJobInputSchema>
+
 export const WorkspaceIdInputSchema = z.object({ id: z.string().min(1) })
 export type WorkspaceIdInput = z.infer<typeof WorkspaceIdInputSchema>
 
