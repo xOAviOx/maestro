@@ -67,4 +67,17 @@ function migrate(db: Db): void {
       updated_at  TEXT NOT NULL
     );
   `)
+
+  // Additive column migrations (idempotent): add only if the column is absent,
+  // so older databases upgrade in place without losing rows.
+  addColumnIfMissing(db, 'workspaces', 'group_id', 'TEXT')
+}
+
+/** Add `column` to `table` if it doesn't already exist. SQLite has no
+ * `ADD COLUMN IF NOT EXISTS`, so we inspect the table schema first. */
+function addColumnIfMissing(db: Db, table: string, column: string, type: string): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`)
+  }
 }
