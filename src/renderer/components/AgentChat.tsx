@@ -79,11 +79,19 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
   const items = useStore((s) => s.chats[workspace.id]) ?? []
   const sendPrompt = useStore((s) => s.sendPrompt)
   const cancelAgent = useStore((s) => s.cancelAgent)
+  const enqueueJob = useStore((s) => s.enqueueJob)
+  const cancelJob = useStore((s) => s.cancelJob)
+  const queue = useStore((s) => s.queue)
+  const siblings = useStore((s) =>
+    s.workspaces.filter((w) => w.id !== workspace.id)
+  )
 
   const [draft, setDraft] = useState('')
+  const [dependsOn, setDependsOn] = useState('')
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const running = workspace.status === 'running'
+  const myJobs = queue.filter((j) => j.workspaceId === workspace.id)
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
@@ -95,6 +103,15 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
     setDraft('')
     void sendPrompt(workspace.id, text)
   }
+
+  const queueIt = (): void => {
+    const text = draft.trim()
+    if (text.length === 0) return
+    setDraft('')
+    void enqueueJob(workspace.id, text, dependsOn || undefined)
+  }
+
+  const wsName = (id: string): string => siblings.find((w) => w.id === id)?.name ?? id.slice(0, 8)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -109,36 +126,90 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
       </div>
 
       <div className="border-t border-slate-800 p-3">
+        {/* Pending queued jobs for this workspace. */}
+        {myJobs.length > 0 && (
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {myJobs.map((j) => (
+              <span
+                key={j.id}
+                className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs text-slate-300"
+                title={j.prompt}
+              >
+                <span className="text-slate-500">queued</span>
+                {j.dependsOnWorkspaceId && (
+                  <span className="text-amber-400">after {wsName(j.dependsOnWorkspaceId)}</span>
+                )}
+                <span className="max-w-[160px] truncate">{j.prompt}</span>
+                <button
+                  className="text-slate-500 hover:text-slate-200"
+                  onClick={() => void cancelJob(j.id)}
+                  title="Remove from queue"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="flex items-end gap-2">
           <textarea
             className="max-h-40 min-h-[44px] flex-1 resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-slate-500"
-            placeholder={running ? 'Agent is working…' : 'Describe a task or follow-up…'}
+            placeholder={running ? 'Agent is working — queue a follow-up…' : 'Describe a task or follow-up…'}
             value={draft}
             rows={1}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                send()
+                if (running) queueIt()
+                else send()
               }
             }}
           />
-          {running ? (
-            <button
-              className="rounded-md border border-red-700 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-950/40"
-              onClick={() => void cancelAgent(workspace.id)}
-            >
-              Cancel
-            </button>
-          ) : (
-            <button
-              className="rounded-md bg-status-running px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-              onClick={send}
-              disabled={draft.trim().length === 0}
-            >
-              Send
-            </button>
-          )}
+          <div className="flex flex-col items-stretch gap-1">
+            {siblings.length > 0 && (
+              <select
+                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-300 outline-none focus:border-slate-500"
+                value={dependsOn}
+                onChange={(e) => setDependsOn(e.target.value)}
+                title="Optionally wait for another workspace to finish first"
+              >
+                <option value="">run when free</option>
+                {siblings.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    after: {w.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <div className="flex gap-2">
+              <button
+                className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                onClick={queueIt}
+                disabled={draft.trim().length === 0}
+                title="Add to the queue; runs when this workspace is free"
+              >
+                ＋ Queue
+              </button>
+              {running ? (
+                <button
+                  className="rounded-md border border-red-700 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-950/40"
+                  onClick={() => void cancelAgent(workspace.id)}
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  className="rounded-md bg-status-running px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+                  onClick={send}
+                  disabled={draft.trim().length === 0}
+                >
+                  Send
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
