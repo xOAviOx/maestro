@@ -15,8 +15,10 @@ import {
   PingRequestSchema,
   RegisterRepoInputSchema,
   RepoPathInputSchema,
+  RunTestsInputSchema,
   SetCredentialInputSchema,
   SetFilesToCopyInputSchema,
+  SetTestCommandInputSchema,
   StartAgentInputSchema,
   TerminalInputSchema,
   TerminalResizeSchema,
@@ -115,6 +117,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const { repoPath, patterns } = SetFilesToCopyInputSchema.parse(raw)
     engine.repos.setFilesToCopy(repoPath, patterns)
   })
+  handle(IpcChannels.repoSetTestCommand, (raw) => {
+    const { repoPath, testCommand } = SetTestCommandInputSchema.parse(raw)
+    engine.repos.setTestCommand(repoPath, testCommand.trim() === '' ? null : testCommand)
+  })
 
   // --- workspaces ---
   handle(IpcChannels.workspaceCreate, (raw) => {
@@ -174,6 +180,10 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const { id } = WorkspaceIdInputSchema.parse(raw)
     const ws = await engine.worktrees.getWorkspace(id)
     if (ws.groupId) await engine.worktrees.archiveGroupExcept(ws.groupId, id)
+  })
+  handle(IpcChannels.workspaceRunTests, (raw) => {
+    const { id } = RunTestsInputSchema.parse(raw)
+    return engine.tests.run(id)
   })
 
   // --- integrations ---
