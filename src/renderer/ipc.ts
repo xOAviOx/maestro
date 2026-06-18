@@ -8,6 +8,7 @@ import {
   MergeResultSchema,
   PingResponseSchema,
   PullRequestResultSchema,
+  QueuedJobSchema,
   RepoInfoSchema,
   RepoRecordSchema,
   ReviewStatusSchema,
@@ -23,11 +24,14 @@ import {
   type CredentialInfo,
   type CredentialKind,
   type CreateWorkspaceInput,
+  type EnqueueJobInput,
+  type FanOutInput,
   type FileDiff,
   type MaestroErrorCode,
   type MergeResult,
   type PingResponse,
   type PullRequestResult,
+  type QueuedJob,
   type RepoInfo,
   type RepoRecord,
   type ReviewStatus,
@@ -112,6 +116,8 @@ export const ipc = {
   // workspaces
   createWorkspace: (input: CreateWorkspaceInput): Promise<Workspace> =>
     call(window.maestro.createWorkspace(input), WorkspaceSchema),
+  fanOut: (input: FanOutInput): Promise<Workspace[]> =>
+    call(window.maestro.fanOut(input), z.array(WorkspaceSchema)),
   listWorkspaces: (repoPath: string): Promise<Workspace[]> =>
     call(window.maestro.listWorkspaces(repoPath), z.array(WorkspaceSchema)),
   listAllWorkspaces: (): Promise<Workspace[]> =>
@@ -137,12 +143,19 @@ export const ipc = {
     call(window.maestro.createPullRequest(id, options), PullRequestResultSchema),
   archiveWorkspace: (id: string, force?: boolean): Promise<void> =>
     callVoid(window.maestro.archiveWorkspace(id, force)),
+  archiveSiblings: (id: string): Promise<void> =>
+    callVoid(window.maestro.archiveSiblings(id)),
 
   // agents
   startAgent: (workspaceId: string, prompt: string, model?: string): Promise<void> =>
     callVoid(window.maestro.startAgent(workspaceId, prompt, model)),
   cancelAgent: (workspaceId: string): Promise<void> =>
     callVoid(window.maestro.cancelAgent(workspaceId)),
+  enqueueJob: (input: EnqueueJobInput): Promise<QueuedJob> =>
+    call(window.maestro.enqueueJob(input), QueuedJobSchema),
+  listQueue: (): Promise<QueuedJob[]> =>
+    call(window.maestro.listQueue(), z.array(QueuedJobSchema)),
+  cancelJob: (jobId: string): Promise<void> => callVoid(window.maestro.cancelJob(jobId)),
   isAgentAvailable: (agentType: AgentType): Promise<boolean> =>
     call(window.maestro.isAgentAvailable(agentType), z.boolean()),
   getAgentAuthStatus: (agentType: AgentType): Promise<AgentAuthStatus> =>
