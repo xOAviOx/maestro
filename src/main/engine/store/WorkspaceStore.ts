@@ -12,6 +12,7 @@ interface WorkspaceRow {
   agent_type: string
   session_id: string | null
   status: string
+  group_id: string | null
   created_at: string
   archived_at: string | null
 }
@@ -28,6 +29,7 @@ function rowToWorkspace(row: WorkspaceRow): Workspace {
     agentType: row.agent_type as AgentType,
     sessionId: row.session_id,
     status: row.status as WorkspaceStatus,
+    groupId: row.group_id,
     createdAt: row.created_at,
     archivedAt: row.archived_at
   }
@@ -46,10 +48,10 @@ export class WorkspaceStore {
       .prepare(
         `INSERT INTO workspaces
            (id, repo_path, repo_name, name, branch, base_branch, worktree_path,
-            agent_type, session_id, status, created_at, archived_at)
+            agent_type, session_id, status, group_id, created_at, archived_at)
          VALUES
            (@id, @repoPath, @repoName, @name, @branch, @baseBranch, @worktreePath,
-            @agentType, @sessionId, @status, @createdAt, @archivedAt)`
+            @agentType, @sessionId, @status, @groupId, @createdAt, @archivedAt)`
       )
       .run(ws)
   }
@@ -85,6 +87,16 @@ export class WorkspaceStore {
       )
       .get(repoPath, branch) as WorkspaceRow | undefined
     return row ? rowToWorkspace(row) : undefined
+  }
+
+  /** Active (non-archived) workspaces in a fan-out group, oldest first. */
+  listByGroup(groupId: string): Workspace[] {
+    const rows = this.db
+      .prepare(
+        'SELECT * FROM workspaces WHERE group_id = ? AND archived_at IS NULL ORDER BY created_at ASC'
+      )
+      .all(groupId) as WorkspaceRow[]
+    return rows.map(rowToWorkspace)
   }
 
   setStatus(id: string, status: WorkspaceStatus): void {
