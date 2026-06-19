@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Maestro design tokens — true-black OLED surfaces with an electric
+ * cyan→indigo accent. Defined as CSS variables so they're available both to
+ * Tailwind (via tailwind.config.cjs) and to raw CSS (scrollbars, selection).
+ */
+:root {
+  --bg: #08090b;
+  --surface: #0e1014;
+  --surface-2: #15181e;
+  --surface-3: #1c2027;
+
+  --border: #23272f;
+  --border-strong: #2e333d;
+
+  --text: #e7e9ee;
+  --text-muted: #9aa3b2;
+  --text-faint: #5e6675;
+
+  --accent: #22d3ee;
+  --accent-strong: #06b6d4;
+  --accent-violet: #818cf8;
+}
+
 html,
 body,
 #root {
@@ -10,8 +33,56 @@ body,
 }
 
 body {
-  @apply bg-slate-950 text-slate-100;
+  background-color: var(--bg);
+  color: var(--text);
   font-family:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica,
     Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background-color: rgba(34, 211, 238, 0.28);
+  color: #fff;
+}
+
+/* Thin, dark, unobtrusive scrollbars to match the OLED surfaces. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: #3a4150;
+  background-clip: padding-box;
+}
+
+@layer utilities {
+  /* Frosted elevated surface for rails/overlays. */
+  .glass {
+    background-color: rgba(14, 16, 20, 0.72);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+  }
+
+  /* Native window-drag regions for the hidden-inset title bar. */
+  .app-drag {
+    -webkit-app-region: drag;
+  }
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
 }
