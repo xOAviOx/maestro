@@ -8,6 +8,11 @@ import {
 } from '@shared/types'
 import { useStore } from '../store'
 import { LoginTerminal } from './LoginTerminal'
+import { Modal } from './ui/Modal'
+import { Button } from './ui/Button'
+import { Input, Select } from './ui/Field'
+import { Icon } from './ui/Icon'
+import { cn } from './ui/cn'
 
 const AGENT_LABELS: Record<AgentType, string> = {
   'claude-code': 'Claude Code',
@@ -60,67 +65,50 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): JSX.Elemen
   }
 
   return (
-    <div className="fixed inset-0 z-20 flex items-center justify-center bg-black/50 p-4">
-      <div className="flex max-h-[85vh] w-full max-w-xl flex-col rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Settings — Accounts</h2>
-          <button className="text-slate-400 hover:text-slate-200" onClick={onClose}>
-            ✕
-          </button>
+    <Modal onClose={onClose} title="Settings — Accounts" size="xl">
+      {loginAgent ? (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <p className="mb-2 text-xs text-content-muted">
+            Complete the {AGENT_LABELS[loginAgent]} login below. It may open your browser to finish
+            sign-in. This pane closes when the CLI reports it&apos;s done.
+          </p>
+          <div className="flex min-h-[320px] flex-1 flex-col">
+            <LoginTerminal agentType={loginAgent} onExit={finishLogin} />
+          </div>
+          <div className="mt-3 flex justify-end">
+            <Button variant="secondary" onClick={finishLogin}>
+              Done
+            </Button>
+          </div>
         </div>
-
-        {loginAgent ? (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <p className="mb-2 text-xs text-slate-400">
-              Complete the {AGENT_LABELS[loginAgent]} login below. It may open your browser to
-              finish sign-in. This pane closes when the CLI reports it&apos;s done.
-            </p>
-            <div className="flex min-h-[320px] flex-1 flex-col">
-              <LoginTerminal agentType={loginAgent} onExit={finishLogin} />
-            </div>
-            <div className="mt-3 flex justify-end">
-              <button
-                className="rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"
-                onClick={finishLogin}
-              >
-                Done
-              </button>
-            </div>
+      ) : (
+        <div className="flex flex-col gap-3 overflow-y-auto">
+          <p className="text-xs text-content-muted">
+            Maestro runs each agent through its own CLI login — your subscription stays with the
+            provider and no tokens are stored here.
+          </p>
+          <RepoSettings />
+          {AGENT_TYPES.map((t) => (
+            <AccountRow
+              key={t}
+              agentType={t}
+              status={agentAuth[t]}
+              credential={agentCredentials[t]}
+              onLogin={LOGIN_CAPABLE.includes(t) ? () => beginLogin(t) : undefined}
+            />
+          ))}
+          <div className="mt-2 flex justify-between">
+            <Button variant="ghost" onClick={() => void refreshAgentAuth()}>
+              <Icon name="refresh" />
+              Re-check
+            </Button>
+            <Button variant="primary" onClick={onClose}>
+              Close
+            </Button>
           </div>
-        ) : (
-          <div className="flex flex-col gap-3 overflow-y-auto">
-            <p className="text-xs text-slate-400">
-              Maestro runs each agent through its own CLI login — your subscription stays with the
-              provider and no tokens are stored here.
-            </p>
-            <RepoSettings />
-            {AGENT_TYPES.map((t) => (
-              <AccountRow
-                key={t}
-                agentType={t}
-                status={agentAuth[t]}
-                credential={agentCredentials[t]}
-                onLogin={LOGIN_CAPABLE.includes(t) ? () => beginLogin(t) : undefined}
-              />
-            ))}
-            <div className="mt-2 flex justify-between">
-              <button
-                className="rounded-md px-3 py-2 text-sm text-slate-400 hover:bg-slate-800"
-                onClick={() => void refreshAgentAuth()}
-              >
-                Re-check
-              </button>
-              <button
-                className="rounded-md bg-status-running px-4 py-2 text-sm font-medium text-white"
-                onClick={onClose}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -139,36 +127,34 @@ function AccountRow({
   const [showAdvanced, setShowAdvanced] = useState(false)
 
   return (
-    <div className="rounded-md border border-slate-700 bg-slate-950 px-4 py-3">
+    <div className="rounded-xl border border-hair bg-surface-2 px-4 py-3">
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="font-medium">{AGENT_LABELS[agentType]}</span>
+            <span className="font-medium text-content">{AGENT_LABELS[agentType]}</span>
             <StatusChip status={status} credential={credential} />
           </div>
-          <p className="mt-0.5 truncate text-xs text-slate-500">
+          <p className="mt-0.5 truncate text-xs text-content-faint">
             {!status.installed
               ? (INSTALL_HINTS[agentType] ?? AGENT_HINTS[agentType])
               : AGENT_HINTS[agentType]}
           </p>
         </div>
         {onLogin && status.installed && (
-          <button
-            className="ml-3 shrink-0 rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"
-            onClick={onLogin}
-          >
+          <Button size="sm" variant="secondary" className="ml-3 shrink-0" onClick={onLogin}>
             {status.loggedIn ? 'Re-login' : 'Log in'}
-          </button>
+          </Button>
         )}
       </div>
 
       {kinds && kinds.length > 0 && (
-        <div className="mt-2 border-t border-slate-800 pt-2">
+        <div className="mt-2 border-t border-hair pt-2">
           <button
-            className="text-[11px] text-slate-500 hover:text-slate-300"
+            className="flex items-center gap-1 text-[11px] text-content-faint hover:text-content-muted"
             onClick={() => setShowAdvanced((v) => !v)}
           >
-            {showAdvanced ? '▾' : '▸'} Advanced — headless / CI token
+            <Icon name={showAdvanced ? 'chevronDown' : 'chevronRight'} size={12} />
+            Advanced — headless / CI token
             {credential.configured ? ' (configured)' : ''}
           </button>
           {showAdvanced && (
@@ -208,18 +194,18 @@ function AdvancedCredential({
 
   return (
     <div className="mt-2 flex flex-col gap-2">
-      <p className="text-[11px] text-slate-500">
+      <p className="text-[11px] text-content-faint">
         For machines that can&apos;t run an interactive login. The secret is encrypted with your OS
         keychain and never shown again — use the CLI login above when you can.
       </p>
       {credential.configured && (
-        <div className="flex items-center justify-between rounded bg-slate-900 px-2 py-1 text-[11px] text-slate-400">
+        <div className="flex items-center justify-between rounded-lg bg-surface px-2 py-1 text-[11px] text-content-muted">
           <span>
             Token stored{credential.kind ? ` (${credential.kind})` : ''}
             {credential.updatedAt ? ` · ${new Date(credential.updatedAt).toLocaleDateString()}` : ''}
           </span>
           <button
-            className="text-red-400 hover:text-red-300"
+            className="text-status-error hover:opacity-80"
             onClick={() => void clearCredential(agentType)}
           >
             Remove
@@ -227,8 +213,8 @@ function AdvancedCredential({
         </div>
       )}
       {kinds.length > 1 && (
-        <select
-          className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs outline-none focus:border-slate-500"
+        <Select
+          className="py-1.5 text-xs"
           value={kind}
           onChange={(e) => setKind(e.target.value as CredentialKind)}
         >
@@ -237,12 +223,12 @@ function AdvancedCredential({
               {k.label}
             </option>
           ))}
-        </select>
+        </Select>
       )}
       <div className="flex gap-2">
-        <input
+        <Input
           type="password"
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs outline-none focus:border-slate-500"
+          className="min-w-0 flex-1 py-1.5 text-xs"
           placeholder={credential.configured ? 'Replace token…' : 'Paste token / API key'}
           value={secret}
           autoComplete="off"
@@ -251,13 +237,15 @@ function AdvancedCredential({
             if (e.key === 'Enter') void save()
           }}
         />
-        <button
-          className="shrink-0 rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+        <Button
+          size="sm"
+          variant="secondary"
+          className="shrink-0"
           onClick={() => void save()}
           disabled={saving || secret.trim().length === 0}
         >
           {saving ? 'Saving…' : 'Save'}
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -274,18 +262,18 @@ function StatusChip({
   let cls: string
   if (status.loggedIn) {
     label = 'Logged in'
-    cls = 'bg-emerald-900/60 text-emerald-300'
+    cls = 'bg-status-done/15 text-status-done'
   } else if (credential.configured) {
     label = 'Token set'
-    cls = 'bg-emerald-900/40 text-emerald-300'
+    cls = 'bg-status-done/10 text-status-done'
   } else if (!status.installed) {
     label = 'Not installed'
-    cls = 'bg-slate-800 text-slate-400'
+    cls = 'bg-surface-3 text-content-muted'
   } else {
     label = 'Logged out'
-    cls = 'bg-amber-900/50 text-amber-300'
+    cls = 'bg-status-awaiting/15 text-status-awaiting'
   }
-  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cls}`}>{label}</span>
+  return <span className={cn('rounded px-1.5 py-0.5 text-[10px] font-medium', cls)}>{label}</span>
 }
 
 /**
@@ -302,7 +290,7 @@ function RepoSettings(): JSX.Element | null {
 
   if (!activeRepoPath || !repoInfo) {
     return (
-      <div className="rounded-md border border-slate-700 bg-slate-950 px-4 py-3 text-xs text-slate-500">
+      <div className="rounded-xl border border-hair bg-surface-2 px-4 py-3 text-xs text-content-faint">
         Open a repository to configure its test command.
       </div>
     )
@@ -317,14 +305,14 @@ function RepoSettings(): JSX.Element | null {
   }
 
   return (
-    <div className="rounded-md border border-slate-700 bg-slate-950 px-4 py-3">
+    <div className="rounded-xl border border-hair bg-surface-2 px-4 py-3">
       <div className="mb-1 flex items-center gap-2">
-        <span className="font-medium">Repository — {repoInfo.name}</span>
+        <span className="font-medium text-content">Repository — {repoInfo.name}</span>
       </div>
-      <label className="mb-1 block text-xs text-slate-400">Test command</label>
+      <label className="mb-1 block text-xs text-content-muted">Test command</label>
       <div className="flex gap-2">
-        <input
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs outline-none focus:border-slate-500"
+        <Input
+          className="min-w-0 flex-1 py-1.5 font-mono text-xs"
           placeholder="e.g. pnpm lint && pnpm test"
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -332,15 +320,17 @@ function RepoSettings(): JSX.Element | null {
             if (e.key === 'Enter') void save()
           }}
         />
-        <button
-          className="shrink-0 rounded-md border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+        <Button
+          size="sm"
+          variant="secondary"
+          className="shrink-0"
           onClick={() => void save()}
           disabled={!dirty}
         >
           {saved ? 'Saved' : 'Save'}
-        </button>
+        </Button>
       </div>
-      <p className="mt-1 text-[11px] text-slate-500">
+      <p className="mt-1 text-[11px] text-content-faint">
         Runs in each workspace&apos;s worktree via your shell. Leave empty to disable. Used by
         &ldquo;Run tests&rdquo; and the fan-out comparison view.
       </p>
