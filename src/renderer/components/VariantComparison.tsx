@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { ipc } from '../ipc'
 import { useStore, type ChatItem } from '../store'
 import { StatusDot, statusLabel } from './StatusDot'
 import { TestResultBadge } from './TestResultBadge'
 import type { Workspace } from '@shared/types'
+import { Button } from './ui/Button'
+import { Icon } from './ui/Icon'
+import { cn } from './ui/cn'
 
 /** Last assistant_text in a workspace's transcript, for a one-line preview. */
 function lastAssistantText(items: ChatItem[] | undefined): string {
@@ -31,8 +35,8 @@ export function VariantComparison({
   workspace: Workspace
   onOpenDiff: (id: string) => void
 }): JSX.Element {
-  const siblings = useStore((s) =>
-    s.workspaces.filter((w) => w.groupId && w.groupId === workspace.groupId)
+  const siblings = useStore(
+    useShallow((s) => s.workspaces.filter((w) => w.groupId && w.groupId === workspace.groupId))
   )
   const chats = useStore((s) => s.chats)
   const testResults = useStore((s) => s.testResults)
@@ -71,17 +75,19 @@ export function VariantComparison({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex items-center justify-between border-b border-slate-800 px-5 py-2">
-        <span className="text-xs text-slate-400">
+      <div className="flex items-center justify-between border-b border-hair px-5 py-2">
+        <span className="text-xs text-content-muted">
           Comparing {siblings.length} variant{siblings.length === 1 ? '' : 's'}
         </span>
-        <button
-          className="rounded-md border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+        <Button
+          size="sm"
+          variant="secondary"
           onClick={() => void runTestsForGroup(siblings.map((w) => w.id))}
           disabled={anyRunning}
         >
+          <Icon name="tests" size={14} />
           {anyRunning ? 'Running…' : 'Run all tests'}
-        </button>
+        </Button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
@@ -89,65 +95,76 @@ export function VariantComparison({
           {siblings.map((w) => {
             const diff = diffs[w.id]
             const preview = lastAssistantText(chats[w.id])
+            const isCurrent = w.id === workspace.id
             return (
               <div
                 key={w.id}
-                className={`flex flex-col rounded-lg border p-3 ${
-                  w.id === workspace.id ? 'border-slate-600 bg-slate-900/60' : 'border-slate-800 bg-slate-900/30'
-                }`}
+                className={cn(
+                  'flex flex-col rounded-xl border p-3 transition-shadow',
+                  isCurrent
+                    ? 'border-accent/60 bg-surface-2 shadow-glow'
+                    : 'border-hair bg-surface/50 hover:border-hair-strong'
+                )}
               >
                 <div className="flex items-center gap-2">
                   <StatusDot status={w.status} />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{w.name}</span>
-                  <span className="text-[11px] text-slate-500">{statusLabel(w.status)}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-content">
+                    {w.name}
+                  </span>
+                  <span className="text-[11px] text-content-faint">{statusLabel(w.status)}</span>
                 </div>
-                <div className="mt-1 truncate font-mono text-[11px] text-slate-500">{w.branch}</div>
+                <div className="mt-1 truncate font-mono text-[11px] text-content-faint">
+                  {w.branch}
+                </div>
 
                 <div className="mt-2 flex items-center gap-2">
                   <TestResultBadge result={testResults[w.id]} running={testRunning[w.id] ?? false} />
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[11px] text-content-faint">
                     {diff ? `${diff.count} changed` : '…'}
                   </span>
                 </div>
 
                 {preview && (
-                  <p className="mt-2 line-clamp-3 max-h-16 overflow-hidden text-xs text-slate-300 whitespace-pre-wrap">
+                  <p className="mt-2 line-clamp-3 max-h-16 overflow-hidden text-xs text-content-muted whitespace-pre-wrap">
                     {preview}
                   </p>
                 )}
 
                 {diff && diff.files.length > 0 && (
-                  <ul className="mt-2 max-h-24 overflow-auto rounded border border-slate-800 bg-slate-950 p-1.5 font-mono text-[10px] text-slate-400">
+                  <ul className="mt-2 max-h-24 overflow-auto rounded-lg border border-hair bg-bg p-1.5 font-mono text-[10px] text-content-muted">
                     {diff.files.slice(0, 12).map((f) => (
                       <li key={f} className="truncate">
                         {f}
                       </li>
                     ))}
-                    {diff.files.length > 12 && <li className="text-slate-600">+{diff.files.length - 12} more</li>}
+                    {diff.files.length > 12 && (
+                      <li className="text-content-faint">+{diff.files.length - 12} more</li>
+                    )}
                   </ul>
                 )}
 
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button
-                    className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+                  <Button
+                    size="sm"
+                    variant="secondary"
                     onClick={() => void runTests(w.id)}
                     disabled={testRunning[w.id] ?? false}
                   >
                     Run tests
-                  </button>
-                  <button
-                    className="rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-200 hover:bg-slate-800"
-                    onClick={() => onOpenDiff(w.id)}
-                  >
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => onOpenDiff(w.id)}>
                     Open full diff
-                  </button>
-                  <button
-                    className="rounded-md border border-amber-700 px-2.5 py-1 text-xs text-amber-300 hover:bg-amber-950/40"
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="border-status-awaiting/50 text-status-awaiting hover:border-status-awaiting hover:bg-status-awaiting/10"
                     onClick={() => void archiveSiblings(w.id)}
                     title="Keep this variant; archive the others in the group"
                   >
+                    <Icon name="keep" size={14} />
                     Keep this
-                  </button>
+                  </Button>
                 </div>
               </div>
             )

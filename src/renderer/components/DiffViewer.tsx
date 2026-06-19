@@ -3,15 +3,18 @@ import { DiffEditor } from '@monaco-editor/react'
 import { ipc, MaestroClientError } from '../ipc'
 import { languageForPath } from '../monaco'
 import type { DiffFile, FileDiff, Workspace } from '@shared/types'
+import { IconButton } from './ui/IconButton'
+import { Icon } from './ui/Icon'
+import { cn } from './ui/cn'
 
 const STATUS_BADGE: Record<DiffFile['status'], { label: string; cls: string }> = {
-  added: { label: 'A', cls: 'text-emerald-400' },
-  modified: { label: 'M', cls: 'text-amber-400' },
-  deleted: { label: 'D', cls: 'text-red-400' },
-  renamed: { label: 'R', cls: 'text-sky-400' },
-  copied: { label: 'C', cls: 'text-sky-400' },
-  'type-changed': { label: 'T', cls: 'text-purple-400' },
-  untracked: { label: 'U', cls: 'text-emerald-400' }
+  added: { label: 'A', cls: 'text-status-done' },
+  modified: { label: 'M', cls: 'text-status-awaiting' },
+  deleted: { label: 'D', cls: 'text-status-error' },
+  renamed: { label: 'R', cls: 'text-accent' },
+  copied: { label: 'C', cls: 'text-accent' },
+  'type-changed': { label: 'T', cls: 'text-accent-violet' },
+  untracked: { label: 'U', cls: 'text-status-done' }
 }
 
 /**
@@ -80,22 +83,23 @@ export function DiffViewer({ workspace }: { workspace: Workspace }): JSX.Element
   return (
     <div className="flex min-h-0 flex-1">
       {/* File list */}
-      <div className="flex w-64 flex-col border-r border-slate-800">
-        <div className="flex items-center justify-between px-3 py-2 text-xs text-slate-400">
+      <div className="flex w-64 flex-col border-r border-hair">
+        <div className="flex items-center justify-between px-3 py-2 text-xs text-content-muted">
           <span>{files.length} changed</span>
-          <button
-            className="rounded px-2 py-0.5 hover:bg-slate-800"
+          <IconButton
+            className="h-6 w-6"
             onClick={() => void loadList(selected?.path ?? null)}
             title="Refresh diff"
+            aria-label="Refresh diff"
           >
-            ↻
-          </button>
+            <Icon name="refresh" size={14} />
+          </IconButton>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {loadingList && files.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-slate-500">Loading…</p>
+            <p className="px-3 py-3 text-xs text-content-faint">Loading…</p>
           ) : files.length === 0 ? (
-            <p className="px-3 py-3 text-xs text-slate-500">No changes vs base.</p>
+            <p className="px-3 py-3 text-xs text-content-faint">No changes vs base.</p>
           ) : (
             <ul>
               {files.map((f) => {
@@ -104,13 +108,16 @@ export function DiffViewer({ workspace }: { workspace: Workspace }): JSX.Element
                 return (
                   <li key={`${f.status}:${f.path}`}>
                     <button
-                      className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs ${
-                        isSel ? 'bg-slate-800' : 'hover:bg-slate-800/50'
-                      }`}
+                      className={cn(
+                        'flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left text-xs transition-colors',
+                        isSel
+                          ? 'border-accent bg-surface-2 text-content'
+                          : 'border-transparent text-content-muted hover:bg-surface-2/60 hover:text-content'
+                      )}
                       onClick={() => setSelected(f)}
                       title={f.path}
                     >
-                      <span className={`w-3 font-mono font-bold ${badge.cls}`}>{badge.label}</span>
+                      <span className={cn('w-3 font-mono font-bold', badge.cls)}>{badge.label}</span>
                       <span className="min-w-0 flex-1 truncate font-mono">{f.path}</span>
                     </button>
                   </li>
@@ -125,11 +132,11 @@ export function DiffViewer({ workspace }: { workspace: Workspace }): JSX.Element
       <div className="min-w-0 flex-1">
         {error && <div className="px-4 py-2 text-xs text-status-error">{error}</div>}
         {!selected ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+          <div className="flex h-full items-center justify-center text-sm text-content-faint">
             Select a file to view its diff.
           </div>
         ) : fileDiff?.binary ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+          <div className="flex h-full items-center justify-center text-sm text-content-faint">
             Binary or too-large file — not shown.
           </div>
         ) : fileDiff ? (
@@ -150,7 +157,7 @@ export function DiffViewer({ workspace }: { workspace: Workspace }): JSX.Element
             height="100%"
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
+          <div className="flex h-full items-center justify-center text-sm text-content-faint">
             Loading diff…
           </div>
         )}
