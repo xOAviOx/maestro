@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { useStore } from '../store'
+import { useEffect } from 'react'
+import { useStore, type WorkspaceTab } from '../store'
 import { AgentChat } from './AgentChat'
 import { DiffViewer } from './DiffViewer'
 import { ReviewBar } from './ReviewBar'
@@ -7,8 +7,9 @@ import { TestRunnerBar } from './TestRunnerBar'
 import { TerminalView } from './TerminalView'
 import { VariantComparison } from './VariantComparison'
 import { StatusDot, statusLabel } from './StatusDot'
-
-type Tab = 'chat' | 'diff' | 'terminal' | 'compare'
+import { Button } from './ui/Button'
+import { Icon, type IconName } from './ui/Icon'
+import { cn } from './ui/cn'
 
 /** Main panel: header for the selected workspace + tabbed chat / diff. */
 export function WorkspaceView(): JSX.Element {
@@ -16,69 +17,86 @@ export function WorkspaceView(): JSX.Element {
   const archiveWorkspace = useStore((s) => s.archiveWorkspace)
   const archiveSiblings = useStore((s) => s.archiveSiblings)
   const selectWorkspace = useStore((s) => s.selectWorkspace)
-  const [tab, setTab] = useState<Tab>('chat')
+  const tab = useStore((s) => s.activeTab)
+  const setTab = useStore((s) => s.setActiveTab)
+  const setActiveDialog = useStore((s) => s.setActiveDialog)
 
   const inGroup = Boolean(workspace?.groupId)
 
   // If the Compare tab is open and the group goes away (after "keep"), fall back.
   useEffect(() => {
     if (tab === 'compare' && !inGroup) setTab('chat')
-  }, [tab, inGroup])
+  }, [tab, inGroup, setTab])
 
   if (!workspace) {
     return (
-      <div className="flex h-full flex-1 items-center justify-center text-sm text-slate-500">
-        Select or create a workspace to begin.
+      <div className="flex h-full flex-1 flex-col items-center justify-center gap-3 text-center">
+        <span className="text-content-faint">
+          <Icon name="spark" size={36} />
+        </span>
+        <p className="text-sm text-content-muted">Select a workspace, or create one to begin.</p>
+        <Button variant="primary" onClick={() => setActiveDialog('new')}>
+          <Icon name="plus" />
+          New workspace
+        </Button>
+        <p className="text-xs text-content-faint">Tip: press ⌘N anytime</p>
       </div>
     )
   }
 
-  const tabBtn = (id: Tab, label: string): JSX.Element => (
+  const tabBtn = (id: WorkspaceTab, label: string, icon: IconName): JSX.Element => (
     <button
-      className={`rounded-md px-3 py-1 text-xs font-medium ${
-        tab === id ? 'bg-slate-800 text-slate-100' : 'text-slate-400 hover:bg-slate-800/50'
-      }`}
+      className={cn(
+        'flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-colors',
+        tab === id
+          ? 'bg-accent text-bg shadow-[0_0_14px_-4px_rgba(34,211,238,0.6)]'
+          : 'text-content-muted hover:bg-surface-3 hover:text-content'
+      )}
       onClick={() => setTab(id)}
     >
+      <Icon name={icon} size={14} />
       {label}
     </button>
   )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
+      <header className="app-drag flex items-center justify-between border-b border-hair px-5 py-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <StatusDot status={workspace.status} />
-            <h1 className="truncate text-base font-semibold">{workspace.name}</h1>
-            <span className="text-xs text-slate-500">{statusLabel(workspace.status)}</span>
+            <h1 className="truncate text-base font-semibold text-content">{workspace.name}</h1>
+            <span className="text-xs text-content-faint">{statusLabel(workspace.status)}</span>
           </div>
-          <div className="mt-0.5 truncate font-mono text-xs text-slate-500">
+          <div className="mt-0.5 truncate font-mono text-xs text-content-faint">
             {workspace.branch} ← {workspace.baseBranch}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex gap-1 rounded-lg bg-slate-900 p-1">
-            {tabBtn('chat', 'Chat')}
-            {tabBtn('diff', 'Diff')}
-            {tabBtn('terminal', 'Terminal')}
-            {inGroup && tabBtn('compare', '⑃ Compare')}
+        <div className="no-drag flex items-center gap-2">
+          <div className="flex gap-1 rounded-lg border border-hair bg-surface-2 p-1">
+            {tabBtn('chat', 'Chat', 'chat')}
+            {tabBtn('diff', 'Diff', 'diff')}
+            {tabBtn('terminal', 'Terminal', 'terminal')}
+            {inGroup && tabBtn('compare', 'Compare', 'compare')}
           </div>
-          <button
-            className="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+          <Button
+            variant="ghost"
             onClick={() => void archiveWorkspace(workspace.id)}
             title="Remove the worktree and archive this workspace"
           >
+            <Icon name="archive" />
             Archive
-          </button>
+          </Button>
           {workspace.groupId && (
-            <button
-              className="rounded-md border border-amber-700 px-3 py-1.5 text-xs text-amber-300 hover:bg-amber-950/40"
+            <Button
+              variant="secondary"
+              className="border-status-awaiting/50 text-status-awaiting hover:border-status-awaiting hover:bg-status-awaiting/10"
               onClick={() => void archiveSiblings(workspace.id)}
               title="Keep this variant; archive the other variants in its fan-out group"
             >
-              Keep this · archive others
-            </button>
+              <Icon name="keep" />
+              Keep this
+            </Button>
           )}
         </div>
       </header>
