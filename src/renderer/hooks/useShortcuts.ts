@@ -50,8 +50,9 @@ export function useShortcuts(): void {
         return
       }
 
-      // The rest target the selected workspace; skip while typing.
-      if (typing) return
+      // The rest target the selected workspace; skip while typing or while a
+      // dialog is open (the dialog owns the foreground; don't act behind it).
+      if (typing || s.activeDialog) return
 
       if (e.key >= '1' && e.key <= '4') {
         if (!s.selectedWorkspaceId) return
@@ -64,6 +65,10 @@ export function useShortcuts(): void {
       if (e.key === 'Enter') {
         const id = s.selectedWorkspaceId
         if (!id || s.testRunning[id]) return
+        // Mirror the Run-tests button's guard: no command → no-op (avoids a
+        // spurious error toast from TestCommandNotConfiguredError).
+        const configured = (s.repoInfo?.testCommand ?? '').trim().length > 0
+        if (!configured) return
         e.preventDefault()
         void s.runTests(id)
       }
