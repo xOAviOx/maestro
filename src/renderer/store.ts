@@ -30,6 +30,19 @@ export type ChatItem = {
   at: string
 } & ({ source: 'user'; text: string } | { source: 'agent'; event: AgentEvent })
 
+/** A transient notification shown bottom-right (success/error/info). */
+export type Toast = {
+  id: string
+  kind: 'success' | 'error' | 'info'
+  message: string
+}
+
+/** Tabs in the main workspace panel. Kept in the store so shortcuts can switch. */
+export type WorkspaceTab = 'chat' | 'diff' | 'terminal' | 'compare'
+
+/** Which global dialog (if any) is open. Lifted here so shortcuts can open them. */
+export type ActiveDialog = 'new' | 'fanout' | 'settings' | 'shortcuts' | null
+
 let idCounter = 0
 function nextId(): string {
   idCounter += 1
@@ -66,6 +79,12 @@ interface MaestroState {
   // ui
   loading: boolean
   error: string | null
+  /** Transient notifications (newest last). Rendered by ToastViewport. */
+  toasts: Toast[]
+  /** The active tab in the workspace panel (so shortcuts can switch it). */
+  activeTab: WorkspaceTab
+  /** Which global dialog is open (so shortcuts can open them). */
+  activeDialog: ActiveDialog
 
   // internal
   _initialized: boolean
@@ -96,6 +115,10 @@ interface MaestroState {
   cancelAgent: (workspaceId: string) => Promise<void>
   archiveWorkspace: (id: string) => Promise<void>
   clearError: () => void
+  pushToast: (kind: Toast['kind'], message: string) => void
+  dismissToast: (id: string) => void
+  setActiveTab: (tab: WorkspaceTab) => void
+  setActiveDialog: (dialog: ActiveDialog) => void
   _handlePush: (evt: WorkspacePushEvent) => void
 }
 
@@ -124,6 +147,9 @@ export const useStore = create<MaestroState>((set, get) => ({
 
   loading: false,
   error: null,
+  toasts: [],
+  activeTab: 'chat',
+  activeDialog: null,
   _initialized: false,
 
   init: async () => {
@@ -143,7 +169,7 @@ export const useStore = create<MaestroState>((set, get) => ({
       const first = repos[0]
       if (first) await get().selectRepo(first.path)
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
     // Auth status is non-blocking and best-effort; never fail init over it.
     void get().refreshAgentAuth()
@@ -159,7 +185,7 @@ export const useStore = create<MaestroState>((set, get) => ({
       set({ repos })
       await get().selectRepo(info.path)
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     } finally {
       set({ loading: false })
     }
@@ -175,7 +201,7 @@ export const useStore = create<MaestroState>((set, get) => ({
       const selectedWorkspaceId = workspaces[0]?.id ?? null
       set({ repoInfo, workspaces, selectedWorkspaceId })
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     } finally {
       set({ loading: false })
     }
@@ -192,7 +218,7 @@ export const useStore = create<MaestroState>((set, get) => ({
         : (workspaces[0]?.id ?? null)
       set({ workspaces, selectedWorkspaceId })
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -203,8 +229,9 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       const ws = await ipc.createWorkspace({ repoPath, name, baseBranch, agentType })
       set((s) => ({ workspaces: [ws, ...s.workspaces], selectedWorkspaceId: ws.id }))
+      get().pushToast('success', `Workspace “${ws.name}” created.`)
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     } finally {
       set({ loading: false })
     }
@@ -230,8 +257,9 @@ export const useStore = create<MaestroState>((set, get) => ({
       await get().refreshWorkspaces()
       const first = created[0]
       if (first) set({ selectedWorkspaceId: first.id })
+      get().pushToast('success', `Launched ${created.length} variants for “${name}”.`)
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     } finally {
       set({ loading: false })
     }
@@ -242,8 +270,9 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       await ipc.archiveSiblings(workspaceId)
       await get().refreshWorkspaces()
+      get().pushToast('success', 'Kept this variant; archived the others.')
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     } finally {
       set({ loading: false })
     }
@@ -258,8 +287,9 @@ export const useStore = create<MaestroState>((set, get) => ({
         repoInfo: s.activeRepoPath === repoPath ? repoInfo : s.repoInfo,
         repos: s.repos.map((r) => (r.path === repoPath ? { ...r, testCommand: repoInfo.testCommand } : r))
       }))
+      get().pushToast('success', 'Test command saved.')
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -269,7 +299,7 @@ export const useStore = create<MaestroState>((set, get) => ({
       const result = await ipc.runTests(workspaceId)
       set((s) => ({ testResults: { ...s.testResults, [workspaceId]: result } }))
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     } finally {
       set((s) => ({ testRunning: { ...s.testRunning, [workspaceId]: false } }))
     }
@@ -293,7 +323,7 @@ export const useStore = create<MaestroState>((set, get) => ({
         claudeAvailable: claude.installed
       }))
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -301,8 +331,9 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       const info = await ipc.setCredential(agentType, kind, secret)
       set((s) => ({ agentCredentials: { ...s.agentCredentials, [agentType]: info } }))
+      get().pushToast('success', 'Credential saved.')
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -310,8 +341,9 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       const info = await ipc.clearCredential(agentType)
       set((s) => ({ agentCredentials: { ...s.agentCredentials, [agentType]: info } }))
+      get().pushToast('success', 'Credential removed.')
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -331,7 +363,7 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       await ipc.startAgent(workspaceId, prompt)
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -339,7 +371,7 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       await ipc.cancelAgent(workspaceId)
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -357,7 +389,7 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       await ipc.enqueueJob({ workspaceId, prompt, dependsOnWorkspaceId })
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -365,7 +397,7 @@ export const useStore = create<MaestroState>((set, get) => ({
     try {
       await ipc.cancelJob(jobId)
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     }
   },
 
@@ -379,14 +411,24 @@ export const useStore = create<MaestroState>((set, get) => ({
           s.selectedWorkspaceId === id ? (workspaces[0]?.id ?? null) : s.selectedWorkspaceId
         return { workspaces, selectedWorkspaceId }
       })
+      get().pushToast('success', 'Workspace archived.')
     } catch (err) {
-      set({ error: errMessage(err) })
+      get().pushToast('error', errMessage(err))
     } finally {
       set({ loading: false })
     }
   },
 
   clearError: () => set({ error: null }),
+
+  pushToast: (kind, message) =>
+    set((s) => ({ toasts: [...s.toasts, { id: nextId(), kind, message }] })),
+
+  dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+
+  setActiveTab: (tab) => set({ activeTab: tab }),
+
+  setActiveDialog: (dialog) => set({ activeDialog: dialog }),
 
   _handlePush: (evt) => {
     if (evt.type === 'queue_changed') {
