@@ -17,11 +17,11 @@ nsis:
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
-# macOS target — enable later via a macOS CI runner (signing requires a Mac).
-# mac:
-#   target:
-#     - target: dmg
-#       arch:
-#         - arm64
-#         - x64
-#   category: public.app-category.developer-tools
+# macOS target. Unsigned local build for testing (no Apple Developer ID).
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.developer-tools
+  identity: null
