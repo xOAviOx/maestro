@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { useStore } from '../store'
 import { TestResultBadge, ranAtLabel } from './TestResultBadge'
 import type { Workspace } from '@shared/types'
+import { Button } from './ui/Button'
+import { Icon } from './ui/Icon'
 
 /**
  * Run-tests control + latest result for one workspace. Runs the repo's
@@ -18,27 +20,31 @@ export function TestRunnerBar({ workspace }: { workspace: Workspace }): JSX.Elem
   const configured = (repoInfo?.testCommand ?? '').trim().length > 0
 
   return (
-    <div className="border-b border-slate-800 bg-slate-900/30 px-5 py-2 text-xs">
+    <div className="border-b border-hair bg-surface/30 px-5 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <button
-          className="rounded-md border border-slate-700 px-3 py-1.5 font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+        <Button
+          size="sm"
+          variant="secondary"
           onClick={() => void runTests(workspace.id)}
           disabled={running || !configured}
-          title={configured ? `Run: ${repoInfo?.testCommand}` : 'Configure a test command in Settings'}
+          title={
+            configured ? `Run: ${repoInfo?.testCommand} (⌘↵)` : 'Configure a test command in Settings'
+          }
         >
+          <Icon name="tests" size={14} />
           {running ? 'Running tests…' : 'Run tests'}
-        </button>
+        </Button>
 
         <TestResultBadge result={result} running={running} />
 
         {result && !running && (
           <>
-            <span className="text-slate-600">·</span>
-            <span className="text-slate-500" title={result.command}>
+            <span className="text-content-faint">·</span>
+            <span className="text-content-faint" title={result.command}>
               ran {ranAtLabel(result)}
             </span>
             <button
-              className="text-slate-400 hover:text-slate-200"
+              className="text-content-muted hover:text-content"
               onClick={() => setShowOutput((v) => !v)}
             >
               {showOutput ? 'hide output' : 'show output'}
@@ -47,12 +53,14 @@ export function TestRunnerBar({ workspace }: { workspace: Workspace }): JSX.Elem
         )}
 
         {!configured && (
-          <span className="text-slate-500">No test command — set one in Settings → Repository.</span>
+          <span className="text-content-faint">
+            No test command — set one in Settings → Repository.
+          </span>
         )}
       </div>
 
       {showOutput && result && (
-        <pre className="mt-2 max-h-56 overflow-auto rounded-md border border-slate-800 bg-slate-950 p-2 font-mono text-[11px] leading-relaxed text-slate-300 whitespace-pre-wrap">
+        <pre className="mt-2 max-h-56 overflow-auto rounded-lg border border-hair bg-bg p-2 font-mono text-[11px] leading-relaxed text-content-muted whitespace-pre-wrap">
           {result.output || '(no output)'}
           {result.truncated ? '\n…(truncated)' : ''}
         </pre>
