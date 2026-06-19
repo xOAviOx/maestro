@@ -1,42 +1,50 @@
 import { useEffect, useRef, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
 import { useStore, type ChatItem } from '../store'
 import type { AgentEvent, Workspace } from '@shared/types'
+import { Button } from './ui/Button'
+import { Icon } from './ui/Icon'
+import { Textarea, Select } from './ui/Field'
+import { cn } from './ui/cn'
 
 function AgentEventView({ event }: { event: AgentEvent }): JSX.Element | null {
   switch (event.kind) {
     case 'session_started':
       return (
-        <div className="text-[11px] uppercase tracking-wide text-slate-600">session started</div>
+        <div className="text-[11px] uppercase tracking-wide text-content-faint">session started</div>
       )
     case 'assistant_text':
       return (
-        <div className="max-w-[85%] self-start rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100 whitespace-pre-wrap">
+        <div className="max-w-[85%] self-start rounded-2xl rounded-tl-sm bg-surface-2 px-3 py-2 text-sm text-content whitespace-pre-wrap">
           {event.text}
         </div>
       )
     case 'tool_use':
       return (
-        <div className="self-start rounded-md border border-slate-700 bg-slate-900 px-2 py-1 font-mono text-xs text-sky-300">
-          🔧 {event.name}
+        <div className="flex items-center gap-1.5 self-start rounded-lg border border-hair bg-surface px-2 py-1 font-mono text-xs text-accent">
+          <Icon name="wrench" size={13} />
+          {event.name}
           {renderInputHint(event.input)}
         </div>
       )
     case 'tool_result':
       return (
         <div
-          className={`self-start rounded-md border px-2 py-1 font-mono text-xs ${
+          className={cn(
+            'flex items-center gap-1.5 self-start rounded-lg border px-2 py-1 font-mono text-xs',
             event.ok
-              ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300'
-              : 'border-red-800 bg-red-950/40 text-red-300'
-          }`}
+              ? 'border-status-done/40 bg-status-done/10 text-status-done'
+              : 'border-status-error/40 bg-status-error/10 text-status-error'
+          )}
         >
-          {event.ok ? '✓' : '✗'} {event.name}
-          {event.summary ? <span className="ml-1 text-slate-400">— {event.summary}</span> : null}
+          <Icon name={event.ok ? 'check' : 'cross'} size={13} />
+          {event.name}
+          {event.summary ? <span className="ml-1 text-content-muted">— {event.summary}</span> : null}
         </div>
       )
     case 'turn_complete':
       return (
-        <div className="text-[11px] uppercase tracking-wide text-slate-600">
+        <div className="text-[11px] uppercase tracking-wide text-content-faint">
           turn complete
           {event.usage?.totalCostUsd !== undefined
             ? ` · $${event.usage.totalCostUsd.toFixed(4)}`
@@ -45,7 +53,7 @@ function AgentEventView({ event }: { event: AgentEvent }): JSX.Element | null {
       )
     case 'error':
       return (
-        <div className="max-w-[85%] self-start rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-300">
+        <div className="max-w-[85%] self-start rounded-2xl border border-status-error/40 bg-status-error/10 px-3 py-2 text-sm text-status-error">
           {event.message}
         </div>
       )
@@ -66,7 +74,7 @@ function renderInputHint(input: unknown): string {
 function ChatItemView({ item }: { item: ChatItem }): JSX.Element | null {
   if (item.source === 'user') {
     return (
-      <div className="max-w-[85%] self-end rounded-lg bg-status-running px-3 py-2 text-sm text-white whitespace-pre-wrap">
+      <div className="max-w-[85%] self-end rounded-2xl rounded-tr-sm bg-accent px-3 py-2 text-sm font-medium text-bg whitespace-pre-wrap">
         {item.text}
       </div>
     )
@@ -82,8 +90,8 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
   const enqueueJob = useStore((s) => s.enqueueJob)
   const cancelJob = useStore((s) => s.cancelJob)
   const queue = useStore((s) => s.queue)
-  const siblings = useStore((s) =>
-    s.workspaces.filter((w) => w.id !== workspace.id)
+  const siblings = useStore(
+    useShallow((s) => s.workspaces.filter((w) => w.id !== workspace.id))
   )
 
   const [draft, setDraft] = useState('')
@@ -117,35 +125,40 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
     <div className="flex min-h-0 flex-1 flex-col">
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-4">
         {items.length === 0 ? (
-          <p className="m-auto text-sm text-slate-500">
-            Send a task to start the agent in this workspace.
-          </p>
+          <div className="m-auto flex flex-col items-center gap-2 text-center">
+            <span className="text-content-faint">
+              <Icon name="chat" size={30} />
+            </span>
+            <p className="text-sm text-content-muted">
+              Send a task to start the agent in this workspace.
+            </p>
+          </div>
         ) : (
           items.map((item) => <ChatItemView key={item.id} item={item} />)
         )}
       </div>
 
-      <div className="border-t border-slate-800 p-3">
+      <div className="border-t border-hair bg-surface/40 p-3">
         {/* Pending queued jobs for this workspace. */}
         {myJobs.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {myJobs.map((j) => (
               <span
                 key={j.id}
-                className="flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs text-slate-300"
+                className="flex items-center gap-1 rounded-full border border-hair bg-surface-2 px-2 py-0.5 text-xs text-content-muted"
                 title={j.prompt}
               >
-                <span className="text-slate-500">queued</span>
+                <span className="text-content-faint">queued</span>
                 {j.dependsOnWorkspaceId && (
-                  <span className="text-amber-400">after {wsName(j.dependsOnWorkspaceId)}</span>
+                  <span className="text-status-awaiting">after {wsName(j.dependsOnWorkspaceId)}</span>
                 )}
                 <span className="max-w-[160px] truncate">{j.prompt}</span>
                 <button
-                  className="text-slate-500 hover:text-slate-200"
+                  className="text-content-faint hover:text-content"
                   onClick={() => void cancelJob(j.id)}
                   title="Remove from queue"
                 >
-                  ✕
+                  <Icon name="close" size={12} />
                 </button>
               </span>
             ))}
@@ -153,9 +166,11 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
         )}
 
         <div className="flex items-end gap-2">
-          <textarea
-            className="max-h-40 min-h-[44px] flex-1 resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm outline-none focus:border-slate-500"
-            placeholder={running ? 'Agent is working — queue a follow-up…' : 'Describe a task or follow-up…'}
+          <Textarea
+            className="max-h-40 min-h-[44px] flex-1"
+            placeholder={
+              running ? 'Agent is working — queue a follow-up…' : 'Describe a task or follow-up…'
+            }
             value={draft}
             rows={1}
             onChange={(e) => setDraft(e.target.value)}
@@ -169,8 +184,8 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
           />
           <div className="flex flex-col items-stretch gap-1">
             {siblings.length > 0 && (
-              <select
-                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-300 outline-none focus:border-slate-500"
+              <Select
+                className="py-1 text-xs"
                 value={dependsOn}
                 onChange={(e) => setDependsOn(e.target.value)}
                 title="Optionally wait for another workspace to finish first"
@@ -181,32 +196,28 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
                     after: {w.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             )}
             <div className="flex gap-2">
-              <button
-                className="rounded-md border border-slate-700 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+              <Button
+                variant="secondary"
                 onClick={queueIt}
                 disabled={draft.trim().length === 0}
                 title="Add to the queue; runs when this workspace is free"
               >
-                ＋ Queue
-              </button>
+                <Icon name="queue" />
+                Queue
+              </Button>
               {running ? (
-                <button
-                  className="rounded-md border border-red-700 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-950/40"
-                  onClick={() => void cancelAgent(workspace.id)}
-                >
+                <Button variant="danger" onClick={() => void cancelAgent(workspace.id)}>
+                  <Icon name="close" />
                   Cancel
-                </button>
+                </Button>
               ) : (
-                <button
-                  className="rounded-md bg-status-running px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-                  onClick={send}
-                  disabled={draft.trim().length === 0}
-                >
+                <Button variant="primary" onClick={send} disabled={draft.trim().length === 0}>
+                  <Icon name="send" />
                   Send
-                </button>
+                </Button>
               )}
             </div>
           </div>
