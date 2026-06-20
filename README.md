@@ -10,15 +10,52 @@ helps ship it.
 
 ## Status
 
-All modules (0–6 + 4b + 7) are built and verified: scaffold, orchestration
-engine, harness layer (Claude Code), workspace supervisor, UI shell, Monaco diff
-viewer, merge/PR/archive, a raw terminal per workspace (node-pty + xterm), and
-agent accounts (CLI login from Settings → Accounts).
+The core is built and verified: scaffold, orchestration engine, harness layer
+(Claude Code + Codex), workspace supervisor, UI shell, Monaco diff viewer,
+merge/PR/archive, a raw terminal per workspace (node-pty + xterm), and agent
+accounts (CLI login from Settings → Accounts).
 
-Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m7` plus
+On top of that, four workflow features round out the "run many, ship one" loop:
+**fan-out**, a **task queue**, a per-repo **test runner**, and a side-by-side
+**comparison view** (see [Features](#features) below).
+
+Each module has a headless smoke test: `npm run smoke:m1` … `smoke:m10` plus
 `smoke:m4b` (run `npm run rebuild:node` first — see ABI note below; `smoke:m4b`
 and `smoke:m7` work on either ABI — node-pty ships N-API prebuilds and the auth
 probes don't touch the DB).
+
+## Features
+
+### Fan-out — try several agents/models at once
+
+Turn one task into **2–5 parallel variants**, each running a different agent or
+model in its own isolated worktree but sharing a `groupId`. Open the **Fan-out**
+dialog, pick the variants, and Maestro spins them up side by side in the sidebar
+(grouped under the task). When one variant wins, **"keep this · archive others"**
+promotes it and archives the rest in a single click.
+
+### Task queue — sequence work instead of babysitting it
+
+A unified queue lets you line up runs instead of starting them by hand. Jobs run
+**sequentially per workspace**, and you can **chain across workspaces** so one
+job only starts after another finishes (`dependsOnWorkspaceId`). The AgentChat
+shows queue chips and a **"run after"** dropdown; cancel or reorder anytime. The
+queue pushes live `queue_changed` updates to the UI.
+
+### Test runner — one click to know if a variant works
+
+Configure a **test command per repository** (Settings → Repository). Each
+workspace gets a **Run tests** bar that executes that command against the
+variant's worktree, with a timeout and tail-capped output, and shows a
+pass/fail **badge**. Results are kept per-workspace and timestamped so you can
+tell at a glance which variant is green.
+
+### Comparison view — judge variants side by side
+
+When a task fanned out into a group, a **⑃ Compare** tab appears. It lays the
+variants out together — each with its **status, diff size, last message, and
+test badge** — and gives you **Run all**, **Open full diff**, and **Keep this**
+so you can pick the winner without clicking through each one individually.
 
 ## Agent accounts (login)
 
@@ -87,11 +124,41 @@ Security posture (hard constraints):
 | `npm run typecheck` | Strict type-check main+preload and renderer. |
 | `npm run build` | Typecheck + bundle main/preload/renderer to `out/`. |
 | `npm run package:win` | Build + produce a Windows NSIS installer in `dist/`. |
+| `npm run package:mac` | Build + produce an **unsigned arm64 `.dmg`** in `dist/` (see below). |
 | `npm run package:dir` | Build + produce an unpacked app dir (fast, no installer). |
 
 ## Cross-platform notes
 
 Paths are always built with Node's `path` module and `os.homedir()` — never
-hardcoded `/` or `~`. Git output is split on `/\r?\n/`. Develop and package on
-Windows first; a signed macOS `dmg` build is a later CI step on a Mac runner
-(the target is stubbed in `electron-builder.yml`).
+hardcoded `/` or `~`. Git output is split on `/\r?\n/`.
+
+## Distributing the macOS build
+
+`npm run package:mac` produces an **unsigned, Apple Silicon (arm64)** `.dmg` at
+`dist/Maestro-<version>-arm64.dmg`. Rebuild the native module for Electron's ABI
+first, or the app crashes on launch:
+
+```bash
+npm run rebuild:electron && npm run package:mac
+```
+
+Because the build is unsigned (no Apple Developer ID), macOS Gatekeeper blocks it
+on other machines with *"Maestro is damaged and can't be opened."* This is the
+unsigned-app block, not a real error. Each recipient does this **once**:
+
+1. Open the `.dmg` and drag **Maestro** into **Applications**.
+2. In Terminal, strip the download quarantine flag:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Maestro.app
+   ```
+3. Launch Maestro from Applications as normal.
+
+Notes:
+
+- **Apple Silicon only.** The build targets `arm64`; Intel Macs aren't covered.
+  Add `x64` (or a `universal` target) in `electron-builder.yml` if you need them.
+- **Agent CLIs aren't bundled.** Maestro orchestrates external coding-agent CLIs
+  (Claude Code, Codex); recipients install and log in to those separately
+  (Settings → Accounts).
+- A signed + notarized build (Apple Developer Program, $99/yr) would remove the
+  Gatekeeper step entirely — left as a later step.
