@@ -1,5 +1,6 @@
 import type { AgentEvent, TokenUsage } from '@shared/types'
 //
+//
 /**
  * Maps Claude Code's `--output-format stream-json --verbose` NDJSON onto the
  * normalized AgentEvent union. Stateful per run: it remembers tool_use ids so
