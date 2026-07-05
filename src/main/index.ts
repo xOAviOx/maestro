@@ -1,11 +1,17 @@
 import { app, BrowserWindow, safeStorage, shell, webContents } from 'electron'
 import { join } from 'path'
 import { registerIpcHandlers } from './ipc'
-import { createEngine, type Engine, type SecretCipher } from './engine'
+import {
+  createEngine,
+  EngineTaskRunner,
+  WorkflowScheduler,
+  type Engine,
+  type SecretCipher
+} from './engine'
 import { WorkspaceSupervisor } from './engine/WorkspaceSupervisor'
 import { PtyManager } from './terminal/PtyManager'
 import { IpcChannels } from '@shared/ipc'
-import type { WorkspacePushEvent } from '@shared/types'
+import type { Workflow, WorkspacePushEvent } from '@shared/types'
 import { log } from './log'
 
 // electron-vite injects the renderer dev-server URL in dev; in prod we load the
@@ -14,6 +20,7 @@ const RENDERER_DEV_URL = process.env['ELECTRON_RENDERER_URL']
 
 let engine: Engine | null = null
 let supervisor: WorkspaceSupervisor | null = null
+let scheduler: WorkflowScheduler | null = null
 let ptyManager: PtyManager | null = null
 
 function createMainWindow(): BrowserWindow {
@@ -71,6 +78,11 @@ function broadcast(evt: WorkspacePushEvent): void {
   sendToAll(IpcChannels.workspaceEvent, evt)
 }
 
+/** Push a workflow snapshot to every live renderer. */
+function broadcastWorkflow(workflow: Workflow): void {
+  sendToAll(IpcChannels.workflowEvent, { type: 'workflow_updated', workflow })
+}
+
 /**
  * OS-keychain-backed cipher for stored credentials, via Electron safeStorage.
  * Encryption is unavailable until the app is ready and on some Linux setups
@@ -86,17 +98,38 @@ function electronCipher(): SecretCipher {
 }
 
 app.whenReady().then(() => {
-  // Engine + supervisor live for the app's lifetime.
+  // Engine + supervisor + scheduler live for the app's lifetime.
   engine = createEngine({ cipher: electronCipher() })
   supervisor = new WorkspaceSupervisor(engine)
-  supervisor.subscribe(broadcast)
+
+  const runner = new EngineTaskRunner(engine, supervisor)
+  scheduler = new WorkflowScheduler({
+    store: engine.workflows,
+    runner,
+    emit: broadcastWorkflow,
+    resolveBaseBranch: (repoPath) => engine!.git.getDefaultBaseBranch(repoPath)
+  })
+
+  // A single supervisor subscription both broadcasts to the renderer AND drives
+  // the DAG scheduler: a task's agent finishing/erroring advances its task. The
+  // scheduler ignores workspace ids it doesn't own (manual, non-workflow runs).
+  supervisor.subscribe((evt) => {
+    broadcast(evt)
+    if (evt.type === 'status_changed') {
+      if (evt.status === 'awaiting_input') scheduler!.onAgentCompleted(evt.workspaceId)
+      else if (evt.status === 'error') scheduler!.onAgentFailed(evt.workspaceId, 'agent error')
+    }
+  })
+
+  // App restart recovery: mark interrupted (previously-running) tasks failed.
+  scheduler.recover()
 
   ptyManager = new PtyManager(
     (e) => sendToAll(IpcChannels.terminalData, e),
     (e) => sendToAll(IpcChannels.terminalExit, e)
   )
 
-  registerIpcHandlers({ engine, supervisor, ptyManager })
+  registerIpcHandlers({ engine, supervisor, scheduler, ptyManager })
 
   createMainWindow()
 

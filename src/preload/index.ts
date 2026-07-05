@@ -4,11 +4,13 @@ import type { MaestroApi } from '@shared/ipc'
 import type {
   AgentType,
   CredentialKind,
+  CreateWorkflowInput,
   CreateWorkspaceInput,
   EnqueueJobInput,
   FanOutInput,
   TerminalDataEvent,
   TerminalExitEvent,
+  WorkflowPushEvent,
   WorkspacePushEvent
 } from '@shared/types'
 
@@ -85,6 +87,33 @@ const api: MaestroApi = {
     ipcRenderer.invoke(IpcChannels.agentCredentialSet, { agentType, kind, secret }),
   clearCredential: (agentType: AgentType) =>
     ipcRenderer.invoke(IpcChannels.agentCredentialClear, { agentType }),
+
+  // workflows (DAG scheduler)
+  createWorkflow: (input: CreateWorkflowInput) =>
+    ipcRenderer.invoke(IpcChannels.workflowCreate, input),
+  listWorkflows: () => ipcRenderer.invoke(IpcChannels.workflowList),
+  getWorkflow: (id: string) => ipcRenderer.invoke(IpcChannels.workflowGet, { id }),
+  startWorkflow: (id: string) => ipcRenderer.invoke(IpcChannels.workflowStart, { id }),
+  pauseWorkflow: (id: string) => ipcRenderer.invoke(IpcChannels.workflowPause, { id }),
+  resumeWorkflow: (id: string) => ipcRenderer.invoke(IpcChannels.workflowResume, { id }),
+  approveTask: (workflowId: string, taskId: string) =>
+    ipcRenderer.invoke(IpcChannels.taskApprove, { workflowId, taskId }),
+  rejectTask: (workflowId: string, taskId: string, mode?: 'cascade' | 'retry', prompt?: string) =>
+    ipcRenderer.invoke(IpcChannels.taskReject, { workflowId, taskId, mode, prompt }),
+  retryTask: (workflowId: string, taskId: string) =>
+    ipcRenderer.invoke(IpcChannels.taskRetry, { workflowId, taskId }),
+  previewCascade: (workflowId: string, taskId: string) =>
+    ipcRenderer.invoke(IpcChannels.taskCascadePreview, { workflowId, taskId }),
+  onWorkflowEvent: (listener: (evt: WorkflowPushEvent) => void) => {
+    const channelListener = (_e: unknown, payload: unknown): void => {
+      // Forwarded raw; renderer's ipc.ts validates before app code sees it.
+      listener(payload as WorkflowPushEvent)
+    }
+    ipcRenderer.on(IpcChannels.workflowEvent, channelListener)
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.workflowEvent, channelListener)
+    }
+  },
 
   // integrations
   isGhAvailable: () => ipcRenderer.invoke(IpcChannels.ghAvailable),

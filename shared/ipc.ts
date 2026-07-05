@@ -1,6 +1,7 @@
 import type {
   AgentAuthStatus,
   AgentType,
+  CreateWorkflowInput,
   CreateWorkspaceInput,
   CredentialInfo,
   CredentialKind,
@@ -19,6 +20,8 @@ import type {
   TerminalExitEvent,
   TerminalStartResult,
   TestResult,
+  Workflow,
+  WorkflowPushEvent,
   Workspace,
   WorkspaceDiff,
   WorkspacePushEvent
@@ -85,8 +88,21 @@ export const IpcChannels = {
   agentCredentialSet: 'maestro:agent:credentialSet',
   agentCredentialClear: 'maestro:agent:credentialClear',
 
-  // push channel (main -> renderer)
-  workspaceEvent: 'maestro:workspace-event'
+  // workflows (Module 9 — DAG scheduler)
+  workflowCreate: 'maestro:workflow:create',
+  workflowList: 'maestro:workflow:list',
+  workflowGet: 'maestro:workflow:get',
+  workflowStart: 'maestro:workflow:start',
+  workflowPause: 'maestro:workflow:pause',
+  workflowResume: 'maestro:workflow:resume',
+  taskApprove: 'maestro:task:approve',
+  taskReject: 'maestro:task:reject',
+  taskRetry: 'maestro:task:retry',
+  taskCascadePreview: 'maestro:task:cascadePreview',
+
+  // push channels (main -> renderer)
+  workspaceEvent: 'maestro:workspace-event',
+  workflowEvent: 'maestro:workflow-event'
 } as const
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels]
@@ -177,6 +193,32 @@ export interface MaestroApi {
   setCredential(agentType: AgentType, kind: CredentialKind, secret: string): Promise<CredentialInfo>
   /** Remove a stored headless credential. */
   clearCredential(agentType: AgentType): Promise<CredentialInfo>
+
+  // --- workflows (DAG scheduler) ---
+  /** Validate (cycles/dangling edges rejected) and persist a new workflow (draft). */
+  createWorkflow(input: CreateWorkflowInput): Promise<Workflow>
+  listWorkflows(): Promise<Workflow[]>
+  getWorkflow(id: string): Promise<Workflow>
+  /** Begin scheduling: promote ready tasks and spawn up to maxConcurrency. */
+  startWorkflow(id: string): Promise<Workflow>
+  /** Stop spawning new agents; running agents finish. */
+  pauseWorkflow(id: string): Promise<Workflow>
+  resumeWorkflow(id: string): Promise<Workflow>
+  /** Approve a completed task's diff → merge it (serially) → release children. */
+  approveTask(workflowId: string, taskId: string): Promise<Workflow>
+  /** Reject a completed task: 'cascade' cancels descendants; 'retry' re-queues it. */
+  rejectTask(
+    workflowId: string,
+    taskId: string,
+    mode?: 'cascade' | 'retry',
+    prompt?: string
+  ): Promise<Workflow>
+  /** Manually retry a failed task. */
+  retryTask(workflowId: string, taskId: string): Promise<Workflow>
+  /** Task ids a cascade rejection of this task would cancel (for a confirm dialog). */
+  previewCascade(workflowId: string, taskId: string): Promise<string[]>
+  /** Subscribe to workflow snapshot push events. Returns an unsubscribe function. */
+  onWorkflowEvent(listener: (evt: WorkflowPushEvent) => void): () => void
 
   // --- integrations ---
   isGhAvailable(): Promise<boolean>

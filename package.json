@@ -18,6 +18,8 @@
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "typecheck:web": "tsc -p tsconfig.web.json --noEmit",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "smoke:m1": "tsx scripts/module1-smoke.ts",
     "smoke:m2": "tsx scripts/module2-smoke.ts",
     "smoke:m3": "tsx scripts/module3-smoke.ts",
@@ -29,6 +31,7 @@
     "smoke:m9": "tsx scripts/module9-smoke.ts",
     "smoke:m10": "tsx scripts/module10-smoke.ts",
     "smoke:m11": "tsx scripts/module11-smoke.ts",
+    "smoke:m12": "tsx scripts/module12-smoke.ts",
     "rebuild:electron": "electron-rebuild -f -o better-sqlite3",
     "rebuild:node": "npm rebuild better-sqlite3"
   },
@@ -59,6 +62,7 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.22.4",
     "typescript": "^5.7.2",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   }
 }

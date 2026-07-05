@@ -17,6 +17,8 @@ import {
   TerminalExitEventSchema,
   TerminalStartResultSchema,
   TestResultSchema,
+  WorkflowPushEventSchema,
+  WorkflowSchema,
   WorkspaceDiffSchema,
   WorkspacePushEventSchema,
   WorkspaceSchema,
@@ -25,6 +27,7 @@ import {
   type AgentLoginStartResult,
   type CredentialInfo,
   type CredentialKind,
+  type CreateWorkflowInput,
   type CreateWorkspaceInput,
   type EnqueueJobInput,
   type FanOutInput,
@@ -42,6 +45,8 @@ import {
   type TerminalExitEvent,
   type TerminalStartResult,
   type TestResult,
+  type Workflow,
+  type WorkflowPushEvent,
   type Workspace,
   type WorkspaceDiff,
   type WorkspacePushEvent
@@ -187,6 +192,38 @@ export const ipc = {
   clearCredential: (agentType: AgentType): Promise<CredentialInfo> =>
     call(window.maestro.clearCredential(agentType), CredentialInfoSchema),
   isGhAvailable: (): Promise<boolean> => call(window.maestro.isGhAvailable(), z.boolean()),
+
+  // workflows (DAG scheduler)
+  createWorkflow: (input: CreateWorkflowInput): Promise<Workflow> =>
+    call(window.maestro.createWorkflow(input), WorkflowSchema),
+  listWorkflows: (): Promise<Workflow[]> =>
+    call(window.maestro.listWorkflows(), z.array(WorkflowSchema)),
+  getWorkflow: (id: string): Promise<Workflow> =>
+    call(window.maestro.getWorkflow(id), WorkflowSchema),
+  startWorkflow: (id: string): Promise<Workflow> =>
+    call(window.maestro.startWorkflow(id), WorkflowSchema),
+  pauseWorkflow: (id: string): Promise<Workflow> =>
+    call(window.maestro.pauseWorkflow(id), WorkflowSchema),
+  resumeWorkflow: (id: string): Promise<Workflow> =>
+    call(window.maestro.resumeWorkflow(id), WorkflowSchema),
+  approveTask: (workflowId: string, taskId: string): Promise<Workflow> =>
+    call(window.maestro.approveTask(workflowId, taskId), WorkflowSchema),
+  rejectTask: (
+    workflowId: string,
+    taskId: string,
+    mode?: 'cascade' | 'retry',
+    prompt?: string
+  ): Promise<Workflow> =>
+    call(window.maestro.rejectTask(workflowId, taskId, mode, prompt), WorkflowSchema),
+  retryTask: (workflowId: string, taskId: string): Promise<Workflow> =>
+    call(window.maestro.retryTask(workflowId, taskId), WorkflowSchema),
+  previewCascade: (workflowId: string, taskId: string): Promise<string[]> =>
+    call(window.maestro.previewCascade(workflowId, taskId), z.array(z.string())),
+  onWorkflowEvent: (listener: (evt: WorkflowPushEvent) => void): (() => void) =>
+    window.maestro.onWorkflowEvent((raw) => {
+      const parsed = WorkflowPushEventSchema.safeParse(raw)
+      if (parsed.success) listener(parsed.data)
+    }),
 
   // terminal
   startTerminal: (workspaceId: string, cols: number, rows: number): Promise<TerminalStartResult> =>

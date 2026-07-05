@@ -84,6 +84,39 @@ function migrate(db: Db): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_review_ws ON review_events (workspace_id);
+
+    -- Module 9 — DAG scheduler. A workflow is a set of tasks with dependency
+    -- edges; tasks spawn Workspaces (worktree+agent) as their deps merge. State
+    -- lives in SQLite so an app restart can recover the graph (running tasks are
+    -- marked failed/interrupted; the rest of the DAG is intact).
+    CREATE TABLE IF NOT EXISTS workflows (
+      id              TEXT PRIMARY KEY,
+      name            TEXT NOT NULL,
+      repo_path       TEXT NOT NULL,
+      base_branch     TEXT NOT NULL,
+      status          TEXT NOT NULL,            -- draft|running|paused|completed|failed
+      max_concurrency INTEGER NOT NULL,
+      created_at      INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tasks (
+      workflow_id    TEXT NOT NULL,
+      id             TEXT NOT NULL,             -- unique within its workflow
+      title          TEXT NOT NULL,
+      prompt         TEXT NOT NULL,
+      depends_on     TEXT NOT NULL DEFAULT '[]',-- JSON array of sibling task ids
+      status         TEXT NOT NULL,             -- see TASK_STATUSES
+      agent_id       TEXT,                      -- linked workspace id once spawned
+      retry_count    INTEGER NOT NULL DEFAULT 0,
+      created_at     INTEGER NOT NULL,
+      started_at     INTEGER,
+      finished_at    INTEGER,
+      failure_reason TEXT,
+      PRIMARY KEY (workflow_id, id),
+      FOREIGN KEY (workflow_id) REFERENCES workflows (id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_workflow ON tasks (workflow_id);
   `)
 
   // Additive column migrations (idempotent): add only if the column is absent,

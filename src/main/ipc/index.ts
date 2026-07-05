@@ -7,6 +7,7 @@ import {
   ArchiveWorkspaceInputSchema,
   CommitWorkspaceInputSchema,
   CreatePrInputSchema,
+  CreateWorkflowInputSchema,
   CreateWorkspaceInputSchema,
   EnqueueJobInputSchema,
   FanOutInputSchema,
@@ -14,15 +15,18 @@ import {
   MergeWorkspaceInputSchema,
   PingRequestSchema,
   RegisterRepoInputSchema,
+  RejectTaskInputSchema,
   RepoPathInputSchema,
   RunTestsInputSchema,
   SetCredentialInputSchema,
   SetFilesToCopyInputSchema,
   SetTestCommandInputSchema,
   StartAgentInputSchema,
+  TaskRefInputSchema,
   TerminalInputSchema,
   TerminalResizeSchema,
   TerminalStartInputSchema,
+  WorkflowIdInputSchema,
   WorkspaceIdInputSchema,
   type PingResponse,
   type TerminalStartResult
@@ -32,12 +36,14 @@ import { getAgentAuthStatus, resolveLoginCommand } from '../harness'
 import { maestroHome } from '../engine/util/paths'
 import type { Engine } from '../engine'
 import type { WorkspaceSupervisor } from '../engine/WorkspaceSupervisor'
+import type { WorkflowScheduler } from '../engine/scheduler/WorkflowScheduler'
 import type { PtyManager } from '../terminal/PtyManager'
 import { log } from '../log'
 
 export interface IpcDeps {
   engine: Engine
   supervisor: WorkspaceSupervisor
+  scheduler: WorkflowScheduler
   ptyManager: PtyManager
 }
 
@@ -49,7 +55,7 @@ export interface IpcDeps {
  * message instead of crashing main.
  */
 export function registerIpcHandlers(deps: IpcDeps): void {
-  const { engine, supervisor, ptyManager } = deps
+  const { engine, supervisor, scheduler, ptyManager } = deps
 
   // Wrap a handler so all errors become serializable ErrorPayloads.
   const handle = <T>(
@@ -247,6 +253,45 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     const { agentType } = AgentAvailabilityInputSchema.parse(raw)
     engine.credentials.clear(agentType)
     return engine.credentials.info(agentType)
+  })
+
+  // --- workflows (Module 9 — DAG scheduler) ---
+  handle(IpcChannels.workflowCreate, (raw) => {
+    const input = CreateWorkflowInputSchema.parse(raw)
+    return scheduler.createWorkflow(input)
+  })
+  handle(IpcChannels.workflowList, () => scheduler.listWorkflows())
+  handle(IpcChannels.workflowGet, (raw) => {
+    const { id } = WorkflowIdInputSchema.parse(raw)
+    return scheduler.getWorkflow(id)
+  })
+  handle(IpcChannels.workflowStart, (raw) => {
+    const { id } = WorkflowIdInputSchema.parse(raw)
+    return scheduler.startWorkflow(id)
+  })
+  handle(IpcChannels.workflowPause, (raw) => {
+    const { id } = WorkflowIdInputSchema.parse(raw)
+    return scheduler.pauseWorkflow(id)
+  })
+  handle(IpcChannels.workflowResume, (raw) => {
+    const { id } = WorkflowIdInputSchema.parse(raw)
+    return scheduler.resumeWorkflow(id)
+  })
+  handle(IpcChannels.taskApprove, (raw) => {
+    const { workflowId, taskId } = TaskRefInputSchema.parse(raw)
+    return scheduler.approveTask(workflowId, taskId)
+  })
+  handle(IpcChannels.taskReject, (raw) => {
+    const { workflowId, taskId, mode, prompt } = RejectTaskInputSchema.parse(raw)
+    return scheduler.rejectTask(workflowId, taskId, mode, prompt)
+  })
+  handle(IpcChannels.taskRetry, (raw) => {
+    const { workflowId, taskId } = TaskRefInputSchema.parse(raw)
+    return scheduler.retryTask(workflowId, taskId)
+  })
+  handle(IpcChannels.taskCascadePreview, (raw) => {
+    const { workflowId, taskId } = TaskRefInputSchema.parse(raw)
+    return scheduler.previewCascade(workflowId, taskId)
   })
 
   // --- terminal (node-pty) ---

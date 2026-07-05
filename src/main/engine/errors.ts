@@ -115,6 +115,41 @@ export class TestCommandNotConfiguredError extends MaestroError {
   }
 }
 
+export class WorkflowCycleError extends MaestroError {
+  constructor(cycle: string[], details?: Record<string, unknown>) {
+    super(
+      'WORKFLOW_CYCLE',
+      `Workflow has a dependency cycle involving task(s): ${cycle.join(', ')}. Remove an edge to break it.`,
+      { cycle, ...details }
+    )
+    this.name = 'WorkflowCycleError'
+  }
+}
+
+export class WorkflowNotFoundError extends MaestroError {
+  constructor(id: string) {
+    super('WORKFLOW_NOT_FOUND', `Workflow not found: ${id}`, { id })
+    this.name = 'WorkflowNotFoundError'
+  }
+}
+
+export class TaskNotFoundError extends MaestroError {
+  constructor(workflowId: string, taskId: string) {
+    super('TASK_NOT_FOUND', `Task "${taskId}" not found in workflow "${workflowId}".`, {
+      workflowId,
+      taskId
+    })
+    this.name = 'TaskNotFoundError'
+  }
+}
+
+export class InvalidTaskStateError extends MaestroError {
+  constructor(message: string, details?: Record<string, unknown>) {
+    super('INVALID_TASK_STATE', message, details)
+    this.name = 'InvalidTaskStateError'
+  }
+}
+
 /** Normalize any thrown value into a MaestroError. */
 export function toMaestroError(err: unknown): MaestroError {
   if (err instanceof MaestroError) return err

@@ -25,6 +25,11 @@ export const MAESTRO_ERROR_CODES = [
   'HARNESS_NOT_CONFIGURED',
   'HARNESS_UNAVAILABLE',
   'TEST_COMMAND_NOT_CONFIGURED',
+  // Module 12 — DAG scheduler
+  'WORKFLOW_CYCLE',
+  'WORKFLOW_NOT_FOUND',
+  'TASK_NOT_FOUND',
+  'INVALID_TASK_STATE',
   'INTERNAL'
 ] as const
 export const MaestroErrorCodeSchema = z.enum(MAESTRO_ERROR_CODES)
@@ -550,3 +555,147 @@ export const SetTestCommandInputSchema = z.object({
   testCommand: z.string()
 })
 export type SetTestCommandInput = z.infer<typeof SetTestCommandInputSchema>
+
+// Module 12 — Task Dependency DAG Scheduler (workflows + tasks)
+// ---------------------------------------------------------------------------
+
+/**
+ * A task's lifecycle inside a workflow DAG. Crucially, a task's dependencies are
+ * satisfied only when every parent is `merged` (not merely `completed`) — that
+ * is what lets a dependent agent's worktree fork from a base containing its
+ * parents' work.
+ *
+ *   blocked   -> waiting on unmet dependencies
+ *   ready     -> all deps merged; queued to spawn (FIFO, concurrency-capped)
+ *   running   -> agent active in its worktree
+ *   completed -> agent finished a turn; diff awaiting review
+ *   merged    -> diff approved + merged into baseBranch
+ *   rejected  -> diff rejected by the user
+ *   cancelled -> cancelled by a rejection cascade or by the user
+ *   failed    -> agent crashed/errored, or was interrupted by an app restart
+ *
+ * (The `merge-conflict` sub-state and rebase-on-stale-base handling arrive in
+ * Phase 1.2; Phase 1.1 uses these eight states.)
+ */
+export const TASK_STATUSES = [
+  'blocked',
+  'ready',
+  'running',
+  'completed',
+  'merged',
+  'rejected',
+  'cancelled',
+  'failed'
+] as const
+export const TaskStatusSchema = z.enum(TASK_STATUSES)
+export type TaskStatus = z.infer<typeof TaskStatusSchema>
+
+/** A terminal status is one the scheduler never transitions out of on its own. */
+export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = [
+  'merged',
+  'rejected',
+  'cancelled',
+  'failed'
+]
+
+export const TaskSchema = z.object({
+  /** Unique within its workflow; referenced by siblings' `dependsOn`. */
+  id: z.string().min(1),
+  title: z.string(),
+  /** Prompt handed to the agent when the task spawns. */
+  prompt: z.string(),
+  /** Ids of sibling tasks that must be `merged` before this one becomes `ready`. */
+  dependsOn: z.array(z.string()),
+  status: TaskStatusSchema,
+  /**
+   * Linked workspace id once spawned. A Maestro Workspace *is* the DAG's unit of
+   * work (one branch + isolated worktree + agent), so `agentId` is a workspace id.
+   */
+  agentId: z.string().nullable(),
+  /** Automatic retries already spent. Rule: 1 auto retry, then manual only. */
+  retryCount: z.number().int().nonnegative(),
+  createdAt: z.number(),
+  startedAt: z.number().nullable(),
+  finishedAt: z.number().nullable(),
+  failureReason: z.string().nullable()
+})
+export type Task = z.infer<typeof TaskSchema>
+
+export const WORKFLOW_STATUSES = ['draft', 'running', 'paused', 'completed', 'failed'] as const
+export const WorkflowStatusSchema = z.enum(WORKFLOW_STATUSES)
+export type WorkflowStatus = z.infer<typeof WorkflowStatusSchema>
+
+export const WorkflowSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  /**
+   * Repo whose worktrees the tasks spawn in. Added beyond the original spec's
+   * `Workflow` shape because spawning a task creates a Workspace, which needs a
+   * repo to fork worktrees from.
+   */
+  repoPath: z.string(),
+  /** Branch every task's worktree forks from and merges back into. */
+  baseBranch: z.string(),
+  status: WorkflowStatusSchema,
+  /** Cap on simultaneously-running agents (default 3). */
+  maxConcurrency: z.number().int().positive(),
+  tasks: z.array(TaskSchema),
+  createdAt: z.number()
+})
+export type Workflow = z.infer<typeof WorkflowSchema>
+
+/**
+ * One task as supplied when creating a workflow. `id` is caller-chosen so a
+ * builder can wire `dependsOn` edges before anything is persisted; ids only need
+ * to be unique within the workflow.
+ */
+export const NewTaskInputSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  prompt: z.string().min(1),
+  dependsOn: z.array(z.string()).default([])
+})
+export type NewTaskInput = z.input<typeof NewTaskInputSchema>
+
+export const CreateWorkflowInputSchema = z.object({
+  name: z.string().min(1),
+  repoPath: z.string().min(1),
+  /** Defaults to the repo's detected default base branch when omitted. */
+  baseBranch: z.string().optional(),
+  maxConcurrency: z.number().int().positive().default(3),
+  tasks: z.array(NewTaskInputSchema).min(1)
+})
+export type CreateWorkflowInput = z.input<typeof CreateWorkflowInputSchema>
+
+export const WorkflowIdInputSchema = z.object({ id: z.string().min(1) })
+export type WorkflowIdInput = z.infer<typeof WorkflowIdInputSchema>
+
+export const TaskRefInputSchema = z.object({
+  workflowId: z.string().min(1),
+  taskId: z.string().min(1)
+})
+export type TaskRefInput = z.infer<typeof TaskRefInputSchema>
+
+/**
+ * Reject a completed task's diff. `mode: 'cascade'` (default) cancels the task
+ * plus every transitive descendant; `mode: 'retry'` re-queues the same task
+ * (optionally with an edited prompt) without cascading.
+ */
+export const RejectTaskInputSchema = z.object({
+  workflowId: z.string().min(1),
+  taskId: z.string().min(1),
+  mode: z.enum(['cascade', 'retry']).default('cascade'),
+  prompt: z.string().optional()
+})
+export type RejectTaskInput = z.input<typeof RejectTaskInputSchema>
+
+/**
+ * Full-snapshot push event: any workflow/task state change re-broadcasts the
+ * whole workflow. DAGs are small, so the renderer simply re-renders from the
+ * snapshot rather than reconciling deltas.
+ */
+export const WorkflowPushEventSchema = z.object({
+  type: z.literal('workflow_updated'),
+  workflow: WorkflowSchema
+})
+export type WorkflowPushEvent = z.infer<typeof WorkflowPushEventSchema>
