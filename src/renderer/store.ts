@@ -69,6 +69,10 @@ interface MaestroState {
   testResults: Record<string, TestResult>
   /** Per-workspace "tests running" flag, so variants can run independently. */
   testRunning: Record<string, boolean>
+  /** Workspaces whose base branch advanced while their agent runs (badge count =
+   * commits base is ahead). Set by `base_advanced` pushes; cleared on any status
+   * change (the worktree is rebased when the agent completes). */
+  baseAdvanced: Record<string, number>
   claudeAvailable: boolean
   ghAvailable: boolean
   /** Per-agent install + login state, shown in the Accounts settings panel. */
@@ -132,6 +136,7 @@ export const useStore = create<MaestroState>((set, get) => ({
   queue: [],
   testResults: {},
   testRunning: {},
+  baseAdvanced: {},
   claudeAvailable: false,
   ghAvailable: false,
   agentAuth: {
@@ -436,10 +441,22 @@ export const useStore = create<MaestroState>((set, get) => ({
       return
     }
     if (evt.type === 'status_changed') {
+      set((s) => {
+        // Any status change invalidates the stale-base badge: an agent leaving
+        // `running` gets rebased on completion, so the count no longer applies.
+        const { [evt.workspaceId]: _dropped, ...baseAdvanced } = s.baseAdvanced
+        return {
+          workspaces: s.workspaces.map((w) =>
+            w.id === evt.workspaceId ? { ...w, status: evt.status } : w
+          ),
+          baseAdvanced
+        }
+      })
+      return
+    }
+    if (evt.type === 'base_advanced') {
       set((s) => ({
-        workspaces: s.workspaces.map((w) =>
-          w.id === evt.workspaceId ? { ...w, status: evt.status } : w
-        )
+        baseAdvanced: { ...s.baseAdvanced, [evt.workspaceId]: evt.baseAheadCount }
       }))
       return
     }

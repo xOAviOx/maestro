@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { log } from '../../log'
 import {
   InvalidTaskStateError,
+  MergeConflictError,
   TaskNotFoundError,
   WorkflowCycleError,
   WorkflowNotFoundError
@@ -38,6 +39,12 @@ export interface WorkflowSchedulerOptions {
   emit?: (workflow: Workflow) => void
   /** Resolve a repo's default base branch when `baseBranch` is omitted on create. */
   resolveBaseBranch?: (repoPath: string) => Promise<string>
+  /**
+   * Called after every successful task merge — the base branch just advanced,
+   * so still-running sibling agents' worktrees may now be stale. The main
+   * process uses this to push "base advanced" badges to the renderer.
+   */
+  onBaseAdvanced?: (repoPath: string, baseBranch: string) => void
   /** Injectable clock for deterministic tests. */
   now?: () => number
 }
@@ -67,12 +74,27 @@ export class WorkflowScheduler {
    * engine's own repo lock is always uncontended when a merge reaches it.
    */
   private readonly mergeChains = new Map<string, Promise<unknown>>()
+  /**
+   * In-flight rebase-on-complete preps, keyed `${workflowId}:${taskId}`.
+   * approveTask awaits these so a merge never races its task's rebase.
+   */
+  private readonly reviewPreps = new Map<string, Promise<void>>()
+  /**
+   * Per-repo merge-queue blocks (Phase 1.2): while a task's approved merge sits
+   * in conflict, no OTHER task may merge into that repo's base. The blocker's
+   * own re-approval bypasses the guard — that IS the resolution path. Durable
+   * source of truth is the persisted task `conflict` field; recover() re-derives
+   * this map from it on boot.
+   */
+  private readonly mergeBlocks = new Map<string, { workflowId: string; taskId: string }>()
+  private readonly onBaseAdvancedFn: ((repoPath: string, baseBranch: string) => void) | undefined
 
   constructor(options: WorkflowSchedulerOptions) {
     this.store = options.store
     this.runner = options.runner
     this.emitFn = options.emit
     this.resolveBaseBranch = options.resolveBaseBranch
+    this.onBaseAdvancedFn = options.onBaseAdvanced
     this.now = options.now ?? (() => Date.now())
   }
 
@@ -141,6 +163,7 @@ export class WorkflowScheduler {
         status: 'blocked',
         agentId: null,
         retryCount: 0,
+        conflict: null,
         createdAt,
         startedAt: null,
         finishedAt: null,
@@ -180,19 +203,81 @@ export class WorkflowScheduler {
 
   // --- review actions ------------------------------------------------------
 
-  /** Approve a completed task's diff: merge it (serially), then release children. */
+  /**
+   * Approve a completed task's diff: merge it (serially), then release children.
+   *
+   * Phase 1.2 flow: refuse while the repo's merge queue is blocked by another
+   * conflicted task; await any in-flight rebase-on-complete prep; if the task
+   * carries a conflict sub-state, re-run prep once (the user may have resolved
+   * it manually in the worktree's terminal) before merging. A conflicted merge
+   * records `conflict: {kind:'merge'}` on the task, blocks the repo's merge
+   * queue, and rethrows — the worktree is kept alive for manual resolution.
+   */
   async approveTask(workflowId: string, taskId: string): Promise<Workflow> {
-    const { wf, task } = this.require(workflowId, taskId)
+    {
+      const { wf, task } = this.require(workflowId, taskId)
+      if (task.status !== 'completed') {
+        throw new InvalidTaskStateError(
+          `Task "${taskId}" is ${task.status}, not completed; only completed tasks can be approved.`,
+          { workflowId, taskId, status: task.status }
+        )
+      }
+      const block = this.mergeBlocks.get(wf.repoPath)
+      if (block && !(block.workflowId === workflowId && block.taskId === taskId)) {
+        throw new InvalidTaskStateError(
+          `Merge queue for this repo is blocked by conflicted task "${block.taskId}"; resolve or reject it first.`,
+          { workflowId, taskId, blockedBy: { ...block } }
+        )
+      }
+    }
+
+    // Never race the task's own rebase-on-complete prep; then RE-READ state —
+    // prep may have recorded a conflict while we waited.
+    const inFlight = this.reviewPreps.get(`${workflowId}:${taskId}`)
+    if (inFlight) await inFlight
+    let { wf, task } = this.require(workflowId, taskId)
     if (task.status !== 'completed') {
       throw new InvalidTaskStateError(
         `Task "${taskId}" is ${task.status}, not completed; only completed tasks can be approved.`,
         { workflowId, taskId, status: task.status }
       )
     }
+
+    if (task.conflict) {
+      // Resolve-and-retry: the user may have fixed the worktree manually.
+      const res = await this.runner.prepareForReview(task, wf)
+      if (res.conflict) {
+        this.patchTask(workflowId, taskId, {
+          conflict: { ...task.conflict, files: res.conflict.files, at: this.now() }
+        })
+        this.emitSnapshot(workflowId)
+        throw new MergeConflictError(res.conflict.files, { workflowId, taskId })
+      }
+      this.patchTask(workflowId, taskId, { conflict: null })
+      ;({ wf, task } = this.require(workflowId, taskId))
+    }
+
     // Serialize merges per repo — never two merges into the same base at once.
-    await this.enqueueMerge(wf.repoPath, () => this.runner.mergeTask(task, wf))
-    this.patchTask(workflowId, taskId, { status: 'merged' })
+    try {
+      await this.enqueueMerge(wf.repoPath, () => this.runner.mergeTask(task, wf))
+    } catch (err) {
+      if (err instanceof MergeConflictError) {
+        const raw = err.details?.['conflictedFiles']
+        const files = Array.isArray(raw) ? raw.filter((f): f is string => typeof f === 'string') : []
+        this.patchTask(workflowId, taskId, {
+          conflict: { kind: 'merge', files, at: this.now() }
+        })
+        this.mergeBlocks.set(wf.repoPath, { workflowId, taskId })
+        log.warn('scheduler.task-merge-conflict', { workflowId, taskId, files: files.length })
+        this.emitSnapshot(workflowId)
+      }
+      throw err
+    }
+    this.clearMergeBlockIfOwned(wf.repoPath, workflowId, taskId)
+    this.patchTask(workflowId, taskId, { status: 'merged', conflict: null })
     log.info('scheduler.task-merged', { workflowId, taskId })
+    // The base just advanced: running siblings' worktrees may now be stale.
+    this.onBaseAdvancedFn?.(wf.repoPath, wf.baseBranch)
     this.progress(workflowId)
     return this.emitSnapshot(workflowId)
   }
@@ -216,11 +301,14 @@ export class WorkflowScheduler {
       )
     }
     await this.runner.discardTask(task, wf)
+    // Rejecting the conflicted blocker releases the repo's merge queue.
+    this.clearMergeBlockIfOwned(wf.repoPath, workflowId, taskId)
 
     if (mode === 'retry') {
       this.patchTask(workflowId, taskId, {
         status: 'blocked',
         agentId: null,
+        conflict: null,
         startedAt: null,
         finishedAt: null,
         failureReason: null,
@@ -232,7 +320,11 @@ export class WorkflowScheduler {
     }
 
     const toCancel = descendants(wf.tasks, taskId)
-    this.patchTask(workflowId, taskId, { status: 'rejected', finishedAt: this.now() })
+    this.patchTask(workflowId, taskId, {
+      status: 'rejected',
+      conflict: null,
+      finishedAt: this.now()
+    })
     for (const id of toCancel) {
       const child = wf.tasks.find((t) => t.id === id)
       if (child && !TERMINAL_TASK_STATUSES.includes(child.status)) {
@@ -255,9 +347,11 @@ export class WorkflowScheduler {
       )
     }
     await this.runner.discardTask(task, wf)
+    this.clearMergeBlockIfOwned(wf.repoPath, workflowId, taskId)
     this.patchTask(workflowId, taskId, {
       status: 'blocked',
       agentId: null,
+      conflict: null,
       startedAt: null,
       finishedAt: null,
       failureReason: null
@@ -278,6 +372,13 @@ export class WorkflowScheduler {
     // Completing frees a concurrency slot (the agent is no longer running).
     this.progress(hit.workflowId)
     this.emitSnapshot(hit.workflowId)
+    // Phase 1.2: bring the worktree current with base (rebase-on-stale-base)
+    // BEFORE its diff is reviewed. Runs in the background; approveTask awaits it.
+    const key = `${hit.workflowId}:${hit.task.id}`
+    const prep = this.prepareReview(hit.workflowId, hit.task.id).finally(() => {
+      this.reviewPreps.delete(key)
+    })
+    this.reviewPreps.set(key, prep)
   }
 
   /** An agent crashed/errored: auto-retry once, then leave failed for manual retry. */
@@ -304,6 +405,22 @@ export class WorkflowScheduler {
           })
           touched = true
         }
+        // Re-derive the per-repo merge-queue block from the persisted conflict
+        // sub-state (the durable source of truth) so a restart can't silently
+        // let a sibling merge past an unresolved conflict.
+        if (task.status === 'completed' && task.conflict?.kind === 'merge') {
+          const existing = this.mergeBlocks.get(wf.repoPath)
+          if (existing) {
+            log.warn('scheduler.recover-multiple-merge-blocks', {
+              repoPath: wf.repoPath,
+              keeping: existing,
+              ignored: { workflowId: wf.id, taskId: task.id }
+            })
+          } else {
+            this.mergeBlocks.set(wf.repoPath, { workflowId: wf.id, taskId: task.id })
+            log.warn('scheduler.recovered-merge-block', { workflowId: wf.id, taskId: task.id })
+          }
+        }
       }
       if (wf.status === 'running') {
         this.store.setWorkflowStatus(wf.id, 'paused')
@@ -317,6 +434,52 @@ export class WorkflowScheduler {
   }
 
   // --- internals -----------------------------------------------------------
+
+  /**
+   * Rebase-on-complete (Phase 1.2): after an agent finishes, bring its worktree
+   * current with the base branch before the diff is reviewed. A rebase conflict
+   * records the `{kind:'rebase'}` sub-state (worktree left clean via abort) —
+   * the task stays `completed` but cannot merge until resolved. Unexpected git
+   * failures are recorded the same way with a message, never thrown (this runs
+   * in the background off a supervisor event).
+   */
+  private async prepareReview(workflowId: string, taskId: string): Promise<void> {
+    const wf = this.store.get(workflowId)
+    const task = wf?.tasks.find((t) => t.id === taskId)
+    if (!wf || !task || task.status !== 'completed') return
+    try {
+      const res = await this.runner.prepareForReview(task, wf)
+      if (res.conflict) {
+        this.patchTask(workflowId, taskId, {
+          conflict: { kind: 'rebase', files: res.conflict.files, at: this.now() }
+        })
+        log.warn('scheduler.task-rebase-conflict', {
+          workflowId,
+          taskId,
+          files: res.conflict.files.length
+        })
+        this.emitSnapshot(workflowId)
+      } else if (res.rebased) {
+        log.info('scheduler.task-rebased', { workflowId, taskId })
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      this.patchTask(workflowId, taskId, {
+        conflict: { kind: 'rebase', files: [], at: this.now(), message }
+      })
+      log.error('scheduler.review-prep-failed', { workflowId, taskId, message })
+      this.emitSnapshot(workflowId)
+    }
+  }
+
+  /** Release the repo's merge-queue block if this task owns it. */
+  private clearMergeBlockIfOwned(repoPath: string, workflowId: string, taskId: string): void {
+    const block = this.mergeBlocks.get(repoPath)
+    if (block && block.workflowId === workflowId && block.taskId === taskId) {
+      this.mergeBlocks.delete(repoPath)
+      log.info('scheduler.merge-queue-unblocked', { workflowId, taskId })
+    }
+  }
 
   /** Promote newly-eligible tasks to ready, spawn up to the cap, check completion. */
   private progress(workflowId: string): void {
@@ -383,6 +546,7 @@ export class WorkflowScheduler {
       this.patchTask(workflowId, taskId, {
         status: 'blocked',
         agentId: null,
+        conflict: null,
         startedAt: null,
         finishedAt: null,
         failureReason: null,

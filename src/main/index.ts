@@ -84,6 +84,32 @@ function broadcastWorkflow(workflow: Workflow): void {
 }
 
 /**
+ * The base branch just advanced (a workflow merge landed): push a
+ * `base_advanced` badge event for every still-running workspace in that repo
+ * whose worktree is now behind the base. Best-effort per workspace — a git
+ * hiccup on one must not block the others.
+ */
+async function notifyStaleRunning(repoPath: string, baseBranch: string): Promise<void> {
+  if (!engine) return
+  const running = engine.workspaces
+    .listByRepo(repoPath)
+    .filter((w) => w.status === 'running' && w.baseBranch === baseBranch)
+  for (const ws of running) {
+    try {
+      const baseAheadCount = await engine.worktrees.getBaseAheadCount(ws.id)
+      if (baseAheadCount > 0) {
+        broadcast({ type: 'base_advanced', workspaceId: ws.id, baseBranch, baseAheadCount })
+      }
+    } catch (err) {
+      log.warn('main.base-advanced-check-failed', {
+        workspaceId: ws.id,
+        message: String(err)
+      })
+    }
+  }
+}
+
+/**
  * OS-keychain-backed cipher for stored credentials, via Electron safeStorage.
  * Encryption is unavailable until the app is ready and on some Linux setups
  * without a configured keyring; the CredentialStore refuses to persist plaintext
@@ -107,7 +133,12 @@ app.whenReady().then(() => {
     store: engine.workflows,
     runner,
     emit: broadcastWorkflow,
-    resolveBaseBranch: (repoPath) => engine!.git.getDefaultBaseBranch(repoPath)
+    resolveBaseBranch: (repoPath) => engine!.git.getDefaultBaseBranch(repoPath),
+    // After every workflow merge the base advances: badge still-running agents
+    // in that repo whose worktrees are now stale.
+    onBaseAdvanced: (repoPath, baseBranch) => {
+      void notifyStaleRunning(repoPath, baseBranch)
+    }
   })
 
   // A single supervisor subscription both broadcasts to the renderer AND drives

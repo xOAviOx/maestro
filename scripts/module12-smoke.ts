@@ -121,6 +121,11 @@ async function main(): Promise<void> {
         }, 25)
         return { workspaceId: ws.id }
       },
+      async prepareForReview(): Promise<{ rebased: boolean; conflict: { files: string[] } | null }> {
+        // Happy-path smoke: the diamond never conflicts, so skip the real rebase
+        // and keep this test focused on scheduler ordering.
+        return { rebased: false, conflict: null }
+      },
       async mergeTask(task: Task): Promise<void> {
         if (mergeInFlight) throw new Error('CONCURRENT MERGE DETECTED — queue not serial!')
         if (!task.agentId) throw new Error(`task ${task.id} has no workspace`)

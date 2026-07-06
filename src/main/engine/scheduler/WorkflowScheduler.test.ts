@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { NewTaskInput, Task, Workflow, WorkflowStatus } from '@shared/types'
+import { MergeConflictError } from '../errors'
 import { WorkflowScheduler, type WorkflowRepository } from './WorkflowScheduler'
-import type { TaskRunner } from './TaskRunner'
+import type { ReviewPrep, TaskRunner } from './TaskRunner'
 
 /** JSON deep-clone (Task/Workflow are plain JSON-safe data with nulls). */
 function clone<T>(value: T): T {
@@ -39,14 +40,26 @@ class FakeRunner implements TaskRunner {
   readonly spawns: string[] = []
   readonly merges: string[] = []
   readonly discards: string[] = []
+  readonly prepares: string[] = []
   private n = 0
+  /** When set, `prepareForReview` reports these files as a rebase conflict. */
+  prepareConflict: string[] | null = null
+  /** When set, `mergeTask` throws a MergeConflictError for these files instead of merging. */
+  mergeConflict: string[] | null = null
 
   async spawnAgent(task: Task): Promise<{ workspaceId: string }> {
     this.spawns.push(task.id)
     this.n += 1
     return { workspaceId: `ws-${task.id}-${this.n}` }
   }
+  async prepareForReview(task: Task): Promise<ReviewPrep> {
+    this.prepares.push(task.id)
+    if (this.prepareConflict) return { rebased: false, conflict: { files: this.prepareConflict } }
+    // No real worktree in these tests: nothing to rebase, never a conflict.
+    return { rebased: false, conflict: null }
+  }
   async mergeTask(task: Task): Promise<void> {
+    if (this.mergeConflict) throw new MergeConflictError(this.mergeConflict, {})
     this.merges.push(task.id)
   }
   async discardTask(task: Task): Promise<void> {
@@ -329,5 +342,122 @@ describe('WorkflowScheduler', () => {
     expect(task(recovered, wf.id, 'a').status).toBe('failed')
     expect(task(recovered, wf.id, 'a').failureReason).toBe('interrupted')
     expect(task(recovered, wf.id, 'b').status).toBe('blocked')
+  })
+
+  // --- Phase 1.2: rebase-on-complete + merge-conflict queue blocking -------
+
+  it('records a rebase conflict on complete and blocks the merge until resolved', async () => {
+    const wf = await createWorkflow([{ id: 'a', title: 'A', prompt: 'p', dependsOn: [] }])
+    await scheduler.startWorkflow(wf.id)
+    await flush()
+
+    // Agent finishes, but rebasing its worktree onto base conflicts.
+    runner.prepareConflict = ['x.txt']
+    scheduler.onAgentCompleted(task(scheduler, wf.id, 'a').agentId as string)
+    await flush()
+
+    const a = task(scheduler, wf.id, 'a')
+    expect(a.status).toBe('completed')
+    expect(a.conflict).toMatchObject({ kind: 'rebase', files: ['x.txt'] })
+
+    // Approving retries the rebase; still conflicting -> refused, nothing merged.
+    await expect(scheduler.approveTask(wf.id, 'a')).rejects.toMatchObject({ code: 'MERGE_CONFLICT' })
+    expect(runner.merges).toEqual([])
+
+    // User resolves the worktree; the next approve rebases clean and merges.
+    runner.prepareConflict = null
+    await scheduler.approveTask(wf.id, 'a')
+    expect(task(scheduler, wf.id, 'a').status).toBe('merged')
+    expect(task(scheduler, wf.id, 'a').conflict).toBeNull()
+    expect(runner.merges).toEqual(['a'])
+  })
+
+  it('a merge conflict blocks the repo merge queue for OTHER tasks until resolved', async () => {
+    const wf = await createWorkflow(
+      [
+        { id: 'i1', title: 'I1', prompt: 'p', dependsOn: [] },
+        { id: 'i2', title: 'I2', prompt: 'p', dependsOn: [] }
+      ],
+      2
+    )
+    await scheduler.startWorkflow(wf.id)
+    await flush()
+    scheduler.onAgentCompleted(task(scheduler, wf.id, 'i1').agentId as string)
+    scheduler.onAgentCompleted(task(scheduler, wf.id, 'i2').agentId as string)
+    await flush()
+
+    // i1's merge conflicts: it records the sub-state and blocks the queue.
+    runner.mergeConflict = ['shared.txt']
+    await expect(scheduler.approveTask(wf.id, 'i1')).rejects.toMatchObject({ code: 'MERGE_CONFLICT' })
+    expect(task(scheduler, wf.id, 'i1').conflict).toMatchObject({ kind: 'merge' })
+
+    // A DIFFERENT task cannot merge past the block.
+    await expect(scheduler.approveTask(wf.id, 'i2')).rejects.toMatchObject({
+      code: 'INVALID_TASK_STATE',
+      details: { blockedBy: { taskId: 'i1' } }
+    })
+    expect(runner.merges).toEqual([])
+
+    // Resolve i1 (its own re-approval bypasses the block); the queue frees.
+    runner.mergeConflict = null
+    await scheduler.approveTask(wf.id, 'i1')
+    expect(task(scheduler, wf.id, 'i1').status).toBe('merged')
+    await scheduler.approveTask(wf.id, 'i2')
+    expect(task(scheduler, wf.id, 'i2').status).toBe('merged')
+    expect(runner.merges).toEqual(['i1', 'i2'])
+  })
+
+  it('rejecting the conflicted blocker releases the merge queue', async () => {
+    const wf = await createWorkflow(
+      [
+        { id: 'i1', title: 'I1', prompt: 'p', dependsOn: [] },
+        { id: 'i2', title: 'I2', prompt: 'p', dependsOn: [] }
+      ],
+      2
+    )
+    await scheduler.startWorkflow(wf.id)
+    await flush()
+    scheduler.onAgentCompleted(task(scheduler, wf.id, 'i1').agentId as string)
+    scheduler.onAgentCompleted(task(scheduler, wf.id, 'i2').agentId as string)
+    await flush()
+
+    runner.mergeConflict = ['shared.txt']
+    await expect(scheduler.approveTask(wf.id, 'i1')).rejects.toMatchObject({ code: 'MERGE_CONFLICT' })
+
+    // Reject i1 instead of resolving — this must unblock the queue for i2.
+    runner.mergeConflict = null
+    await scheduler.rejectTask(wf.id, 'i1', 'cascade')
+    expect(task(scheduler, wf.id, 'i1').status).toBe('rejected')
+
+    await scheduler.approveTask(wf.id, 'i2')
+    expect(task(scheduler, wf.id, 'i2').status).toBe('merged')
+  })
+
+  it('re-derives the merge-queue block from persisted conflict state after a restart', async () => {
+    const wf = await createWorkflow(
+      [
+        { id: 'i1', title: 'I1', prompt: 'p', dependsOn: [] },
+        { id: 'i2', title: 'I2', prompt: 'p', dependsOn: [] }
+      ],
+      2
+    )
+    await scheduler.startWorkflow(wf.id)
+    await flush()
+    scheduler.onAgentCompleted(task(scheduler, wf.id, 'i1').agentId as string)
+    scheduler.onAgentCompleted(task(scheduler, wf.id, 'i2').agentId as string)
+    await flush()
+
+    runner.mergeConflict = ['shared.txt']
+    await expect(scheduler.approveTask(wf.id, 'i1')).rejects.toMatchObject({ code: 'MERGE_CONFLICT' })
+
+    // Restart over the SAME store: the block lives only in memory, so recover()
+    // must rebuild it from the persisted `conflict` field or a sibling could
+    // silently merge past the unresolved conflict.
+    const recovered = new WorkflowScheduler({ store, runner: new FakeRunner() })
+    recovered.recover()
+    await expect(recovered.approveTask(wf.id, 'i2')).rejects.toMatchObject({
+      code: 'INVALID_TASK_STATE',
+      details: { blockedBy: { taskId: 'i1' } }
+    })
   })
 })
