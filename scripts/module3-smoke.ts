@@ -50,8 +50,13 @@ async function main(): Promise<void> {
 
   const labels = new Map<string, string>() // workspaceId -> "A"/"B"
   const unsubscribe = supervisor.subscribe((evt: WorkspacePushEvent) => {
-    // This test predates the queue and usage pipeline; ignore those events.
-    if (evt.type === 'queue_changed' || evt.type === 'usage_recorded') return
+    // This test predates the queue, usage, and stale-base pipelines; ignore those events.
+    if (
+      evt.type === 'queue_changed' ||
+      evt.type === 'usage_recorded' ||
+      evt.type === 'base_advanced'
+    )
+      return
     const label = labels.get(evt.workspaceId) ?? evt.workspaceId.slice(0, 4)
     if (evt.type === 'agent_event') {
       const e = evt.event

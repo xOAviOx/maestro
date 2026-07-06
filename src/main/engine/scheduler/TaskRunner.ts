@@ -14,9 +14,26 @@ import { InvalidTaskStateError } from '../errors'
  * real system wires from `WorkspaceSupervisor` status events and the mock wires
  * from its timer.
  */
+/**
+ * Result of preparing a completed task's worktree for review: whether a rebase
+ * onto the (possibly advanced) base was performed, and — if the rebase hit
+ * conflicts — the conflicted files. `conflict` is non-null ONLY on a real
+ * conflict; unexpected git failures propagate as thrown errors instead.
+ */
+export interface ReviewPrep {
+  rebased: boolean
+  conflict: { files: string[] } | null
+}
+
 export interface TaskRunner {
   /** Create the task's worktree and start its agent. Returns the linked workspace id. */
   spawnAgent(task: Task, workflow: Workflow): Promise<{ workspaceId: string }>
+  /**
+   * Bring a just-completed task's worktree current with the base branch before
+   * its diff is reviewed (rebase-on-stale-base). Returns conflict files rather
+   * than throwing on a rebase conflict; never merges.
+   */
+  prepareForReview(task: Task, workflow: Workflow): Promise<ReviewPrep>
   /** Merge the task's workspace into the workflow base. Throws on conflict/failure. */
   mergeTask(task: Task, workflow: Workflow): Promise<void>
   /** Tear down a task's worktree (rejection/cancel/retry cleanup). Best-effort. */
@@ -48,6 +65,15 @@ export class EngineTaskRunner implements TaskRunner {
     })
     await this.supervisor.startRun(ws.id, task.prompt)
     return { workspaceId: ws.id }
+  }
+
+  async prepareForReview(task: Task): Promise<ReviewPrep> {
+    if (!task.agentId) return { rebased: false, conflict: null }
+    const res = await this.engine.worktrees.rebaseOntoBase(task.agentId)
+    return {
+      rebased: res.rebased,
+      conflict: res.conflicted.length > 0 ? { files: res.conflicted } : null
+    }
   }
 
   async mergeTask(task: Task, workflow: Workflow): Promise<void> {
