@@ -20,6 +20,9 @@ import type {
   TerminalExitEvent,
   TerminalStartResult,
   TestResult,
+  UsageEvent,
+  UsageListInput,
+  UsageSummary,
   Workflow,
   WorkflowPushEvent,
   Workspace,
@@ -99,6 +102,10 @@ export const IpcChannels = {
   taskReject: 'maestro:task:reject',
   taskRetry: 'maestro:task:retry',
   taskCascadePreview: 'maestro:task:cascadePreview',
+
+  // usage & cost (Module 13 — collection pipeline)
+  usageList: 'maestro:usage:list',
+  usageSummary: 'maestro:usage:summary',
 
   // push channels (main -> renderer)
   workspaceEvent: 'maestro:workspace-event',
@@ -219,6 +226,15 @@ export interface MaestroApi {
   previewCascade(workflowId: string, taskId: string): Promise<string[]>
   /** Subscribe to workflow snapshot push events. Returns an unsubscribe function. */
   onWorkflowEvent(listener: (evt: WorkflowPushEvent) => void): () => void
+
+  // --- usage & cost (collection pipeline) ---
+  /** Persisted per-turn usage samples, newest first. Optionally filtered to one
+   * workspace and/or capped to the most recent `limit` events. New samples are
+   * also pushed live via onWorkspaceEvent ('usage_recorded'). */
+  listUsage(input?: UsageListInput): Promise<UsageEvent[]>
+  /** Token totals + best-effort cost rollup (per-event model rates; the CLI's
+   * own reported cost wins when present). Omit workspaceId for all usage. */
+  getUsageSummary(workspaceId?: string): Promise<UsageSummary>
 
   // --- integrations ---
   isGhAvailable(): Promise<boolean>

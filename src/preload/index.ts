@@ -10,6 +10,7 @@ import type {
   FanOutInput,
   TerminalDataEvent,
   TerminalExitEvent,
+  UsageListInput,
   WorkflowPushEvent,
   WorkspacePushEvent
 } from '@shared/types'
@@ -114,6 +115,12 @@ const api: MaestroApi = {
       ipcRenderer.removeListener(IpcChannels.workflowEvent, channelListener)
     }
   },
+
+  // usage & cost (collection pipeline)
+  listUsage: (input?: UsageListInput) =>
+    ipcRenderer.invoke(IpcChannels.usageList, input ?? {}),
+  getUsageSummary: (workspaceId?: string) =>
+    ipcRenderer.invoke(IpcChannels.usageSummary, workspaceId ? { workspaceId } : {}),
 
   // integrations
   isGhAvailable: () => ipcRenderer.invoke(IpcChannels.ghAvailable),

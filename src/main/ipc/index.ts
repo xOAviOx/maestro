@@ -26,13 +26,17 @@ import {
   TerminalInputSchema,
   TerminalResizeSchema,
   TerminalStartInputSchema,
+  UsageListInputSchema,
+  UsageSummaryInputSchema,
   WorkflowIdInputSchema,
   WorkspaceIdInputSchema,
   type PingResponse,
-  type TerminalStartResult
+  type TerminalStartResult,
+  type UsageEvent
 } from '@shared/types'
 import { toErrorPayload } from '../engine/errors'
 import { getAgentAuthStatus, resolveLoginCommand } from '../harness'
+import { loadPricing, summarizeUsage } from '../engine/pricing'
 import { maestroHome } from '../engine/util/paths'
 import type { Engine } from '../engine'
 import type { WorkspaceSupervisor } from '../engine/WorkspaceSupervisor'
@@ -292,6 +296,25 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   handle(IpcChannels.taskCascadePreview, (raw) => {
     const { workflowId, taskId } = TaskRefInputSchema.parse(raw)
     return scheduler.previewCascade(workflowId, taskId)
+  })
+
+  // --- usage & cost (Module 13 — collection pipeline) ---
+  handle(IpcChannels.usageList, (raw): UsageEvent[] => {
+    const { workspaceId, limit } = UsageListInputSchema.parse(raw ?? {})
+    const events = workspaceId
+      ? engine.usageEvents.listByWorkspace(workspaceId)
+      : engine.usageEvents.listAll(limit)
+    // listByWorkspace has no SQL limit — cap here (events are newest-first).
+    return workspaceId && limit !== undefined ? events.slice(0, limit) : events
+  })
+  handle(IpcChannels.usageSummary, (raw) => {
+    const { workspaceId } = UsageSummaryInputSchema.parse(raw ?? {})
+    const events = workspaceId
+      ? engine.usageEvents.listByWorkspace(workspaceId)
+      : engine.usageEvents.listAll()
+    // Pricing is re-read per call so edits to the override file apply without
+    // a restart (the file is tiny; this is a user-initiated query).
+    return summarizeUsage(events, loadPricing())
   })
 
   // --- terminal (node-pty) ---

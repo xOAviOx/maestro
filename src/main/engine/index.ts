@@ -4,6 +4,7 @@ import { WorkspaceStore } from './store/WorkspaceStore'
 import { CredentialStore, type SecretCipher } from './store/CredentialStore'
 import { ReviewEventStore } from './store/ReviewEventStore'
 import { WorkflowStore } from './store/WorkflowStore'
+import { UsageEventStore } from './store/UsageEventStore'
 import { GitService } from './GitService'
 import { WorktreeManager } from './WorktreeManager'
 import { TestRunner } from './TestRunner'
@@ -22,6 +23,7 @@ export interface Engine {
   tests: TestRunner
   reviewEvents: ReviewEventStore
   workflows: WorkflowStore
+  usageEvents: UsageEventStore
   close(): void
 }
 
@@ -58,6 +60,7 @@ export function createEngine(options: EngineOptions | string = {}): Engine {
   const credentials = new CredentialStore(db, opts.cipher ?? NULL_CIPHER)
   const tests = new TestRunner(workspaces, repos)
   const workflows = new WorkflowStore(db)
+  const usageEvents = new UsageEventStore(db)
   return {
     db,
     git,
@@ -68,6 +71,7 @@ export function createEngine(options: EngineOptions | string = {}): Engine {
     tests,
     reviewEvents,
     workflows,
+    usageEvents,
     close: () => db.close()
   }
 }
@@ -80,6 +84,7 @@ export { WorkspaceStore } from './store/WorkspaceStore'
 export { CredentialStore } from './store/CredentialStore'
 export { ReviewEventStore } from './store/ReviewEventStore'
 export { WorkflowStore } from './store/WorkflowStore'
+export { UsageEventStore } from './store/UsageEventStore'
 export { WorkflowScheduler } from './scheduler/WorkflowScheduler'
 export type { WorkflowRepository, WorkflowSchedulerOptions } from './scheduler/WorkflowScheduler'
 export { EngineTaskRunner } from './scheduler/TaskRunner'

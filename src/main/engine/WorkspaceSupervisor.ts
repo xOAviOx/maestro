@@ -8,6 +8,7 @@ import type {
   AgentType,
   EnqueueJobInput,
   QueuedJob,
+  TokenUsage,
   WorkspacePushEvent,
   WorkspaceStatus
 } from '@shared/types'
@@ -146,7 +147,13 @@ export class WorkspaceSupervisor {
           ...(env ? { env } : {}),
           resumeSessionId
         },
-        (event) => this.emit({ type: 'agent_event', workspaceId, event })
+        (event) => {
+          this.emit({ type: 'agent_event', workspaceId, event })
+          // Module 13 — usage & cost: persist each turn's token/cost sample.
+          if (event.kind === 'turn_complete' && event.usage) {
+            this.recordUsage(workspaceId, event.usage)
+          }
+        }
       )
       if (sessionId) this.engine.workspaces.setSessionId(workspaceId, sessionId)
       this.setStatus(workspaceId, 'awaiting_input')
@@ -281,6 +288,30 @@ export class WorkspaceSupervisor {
   }
 
   // --- internals ---
+
+  /**
+   * Persist one turn's token/cost usage sample and broadcast it. Best-effort:
+   * a persistence failure is logged and swallowed so it can never break the
+   * run loop (the turn itself succeeded). Missing token counts store as 0; a
+   * missing model / CLI-reported cost stores as null (cost is then derived from
+   * the pricing table at read time — never guessed here).
+   */
+  private recordUsage(workspaceId: string, usage: TokenUsage): void {
+    try {
+      const stored = this.engine.usageEvents.record({
+        workspaceId,
+        model: usage.model ?? null,
+        inputTokens: usage.inputTokens ?? 0,
+        outputTokens: usage.outputTokens ?? 0,
+        cacheCreationTokens: usage.cacheCreationTokens ?? 0,
+        cacheReadTokens: usage.cacheReadTokens ?? 0,
+        cliCostUsd: usage.totalCostUsd ?? null
+      })
+      this.emit({ type: 'usage_recorded', workspaceId, usage: stored })
+    } catch (err) {
+      log.warn('supervisor.usage-record-failed', { workspaceId, message: String(err) })
+    }
+  }
 
   private setStatus(workspaceId: string, status: WorkspaceStatus): void {
     this.engine.workspaces.setStatus(workspaceId, status)

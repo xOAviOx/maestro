@@ -443,6 +443,11 @@ export const useStore = create<MaestroState>((set, get) => ({
       }))
       return
     }
+    if (evt.type === 'usage_recorded') {
+      // Module 13: samples are persisted in main; the dashboard (Phase 2.2)
+      // will consume these live. Nothing to reflect in the store yet.
+      return
+    }
     // agent_event -> append to transcript
     set((s) => ({
       chats: {

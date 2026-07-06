@@ -117,6 +117,29 @@ function migrate(db: Db): void {
     );
 
     CREATE INDEX IF NOT EXISTS idx_tasks_workflow ON tasks (workflow_id);
+
+    -- Module 13 — usage & cost. Append-only per-turn token/cost samples captured
+    -- from the harness's turn_complete.usage. Retained after a workspace is
+    -- archived so history survives. cli_cost_usd is the agent CLI's own reported
+    -- cost for the turn when present (authoritative); otherwise cost is derived
+    -- from the pricing table at read time. workflow_id/task_id are reserved for
+    -- the Phase 2.2 per-workflow rollup.
+    CREATE TABLE IF NOT EXISTS usage_events (
+      id                     TEXT PRIMARY KEY,
+      workspace_id           TEXT NOT NULL,
+      task_id                TEXT,
+      workflow_id            TEXT,
+      model                  TEXT,
+      input_tokens           INTEGER NOT NULL DEFAULT 0,
+      output_tokens          INTEGER NOT NULL DEFAULT 0,
+      cache_creation_tokens  INTEGER NOT NULL DEFAULT 0,
+      cache_read_tokens      INTEGER NOT NULL DEFAULT 0,
+      cli_cost_usd           REAL,
+      created_at             TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_usage_ws ON usage_events (workspace_id);
+    CREATE INDEX IF NOT EXISTS idx_usage_created ON usage_events (created_at);
   `)
 
   // Additive column migrations (idempotent): add only if the column is absent,

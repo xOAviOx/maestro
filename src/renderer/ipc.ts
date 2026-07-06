@@ -17,6 +17,8 @@ import {
   TerminalExitEventSchema,
   TerminalStartResultSchema,
   TestResultSchema,
+  UsageEventSchema,
+  UsageSummarySchema,
   WorkflowPushEventSchema,
   WorkflowSchema,
   WorkspaceDiffSchema,
@@ -45,6 +47,9 @@ import {
   type TerminalExitEvent,
   type TerminalStartResult,
   type TestResult,
+  type UsageEvent,
+  type UsageListInput,
+  type UsageSummary,
   type Workflow,
   type WorkflowPushEvent,
   type Workspace,
@@ -224,6 +229,12 @@ export const ipc = {
       const parsed = WorkflowPushEventSchema.safeParse(raw)
       if (parsed.success) listener(parsed.data)
     }),
+
+  // usage & cost (collection pipeline)
+  listUsage: (input?: UsageListInput): Promise<UsageEvent[]> =>
+    call(window.maestro.listUsage(input), z.array(UsageEventSchema)),
+  getUsageSummary: (workspaceId?: string): Promise<UsageSummary> =>
+    call(window.maestro.getUsageSummary(workspaceId), UsageSummarySchema),
 
   // terminal
   startTerminal: (workspaceId: string, cols: number, rows: number): Promise<TerminalStartResult> =>

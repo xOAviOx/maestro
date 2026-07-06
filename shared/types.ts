@@ -260,6 +260,75 @@ export const AgentEventSchema = z.discriminatedUnion('kind', [
 export type AgentEvent = z.infer<typeof AgentEventSchema>
 
 // ---------------------------------------------------------------------------
+// Module 13 — usage & cost (collection pipeline)
+// ---------------------------------------------------------------------------
+
+/**
+ * One persisted usage sample — recorded per agent turn from the harness's
+ * `turn_complete.usage`. Tokens default to 0 (a turn always has *some* usage);
+ * `cliCostUsd` is the agent CLI's own reported cost for the turn when it
+ * provides one (authoritative), else null and cost is derived from pricing.
+ * `taskId` / `workflowId` are reserved for the Phase 2.2 per-workflow rollup.
+ */
+export const UsageEventSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  taskId: z.string().nullable(),
+  workflowId: z.string().nullable(),
+  createdAt: z.string(),
+  model: z.string().nullable(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  cacheCreationTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z.number().int().nonnegative(),
+  cliCostUsd: z.number().nullable()
+})
+export type UsageEvent = z.infer<typeof UsageEventSchema>
+
+export const UsageListInputSchema = z.object({
+  workspaceId: z.string().min(1).optional(),
+  limit: z.number().int().positive().max(10000).optional()
+})
+export type UsageListInput = z.infer<typeof UsageListInputSchema>
+
+export const UsageSummaryInputSchema = z.object({
+  workspaceId: z.string().min(1).optional()
+})
+export type UsageSummaryInput = z.infer<typeof UsageSummaryInputSchema>
+
+/**
+ * Session/aggregate rollup. `totalCostUsd` is best-effort (sum of each event's
+ * `cliCostUsd ?? computed`); `costComplete` is false when any event's cost was
+ * unavailable (unknown model + no CLI cost), so the UI can flag it rather than
+ * present a misleadingly precise total.
+ */
+export const UsageSummarySchema = z.object({
+  eventCount: z.number().int().nonnegative(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  cacheCreationTokens: z.number().int().nonnegative(),
+  cacheReadTokens: z.number().int().nonnegative(),
+  totalCostUsd: z.number(),
+  costComplete: z.boolean()
+})
+export type UsageSummary = z.infer<typeof UsageSummarySchema>
+
+/** Per-model rates, in USD per 1,000,000 tokens. */
+export const ModelPriceSchema = z.object({
+  input: z.number().nonnegative(),
+  output: z.number().nonnegative(),
+  cacheRead: z.number().nonnegative(),
+  cacheWrite: z.number().nonnegative()
+})
+export type ModelPrice = z.infer<typeof ModelPriceSchema>
+
+export const PricingTableSchema = z.object({
+  lastVerified: z.string(),
+  models: z.record(z.string(), ModelPriceSchema)
+})
+export type PricingTable = z.infer<typeof PricingTableSchema>
+
+// ---------------------------------------------------------------------------
 // Module 3 — supervisor: push events (main -> renderer) + IPC request payloads
 // ---------------------------------------------------------------------------
 
@@ -304,6 +373,11 @@ export const WorkspacePushEventSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('queue_changed'),
     jobs: z.array(QueuedJobSchema)
+  }),
+  z.object({
+    type: z.literal('usage_recorded'),
+    workspaceId: z.string(),
+    usage: UsageEventSchema
   })
 ])
 export type WorkspacePushEvent = z.infer<typeof WorkspacePushEventSchema>
