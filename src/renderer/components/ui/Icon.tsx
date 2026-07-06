@@ -32,6 +32,8 @@ export type IconName =
   | 'queue'
   | 'keyboard'
   | 'spark'
+  | 'pause'
+  | 'graph'
 
 /** Path/element markup per icon (inside a 24×24 stroke viewBox). */
 const PATHS: Record<IconName, JSX.Element> = {
@@ -118,7 +120,21 @@ const PATHS: Record<IconName, JSX.Element> = {
       <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
     </>
   ),
-  spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
+  spark: <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />,
+  pause: (
+    <>
+      <rect x="6" y="5" width="4" height="14" rx="1" />
+      <rect x="14" y="5" width="4" height="14" rx="1" />
+    </>
+  ),
+  graph: (
+    <>
+      <circle cx="6" cy="5" r="2" />
+      <circle cx="18" cy="12" r="2" />
+      <circle cx="6" cy="19" r="2" />
+      <path d="M8 6l8 5M8 18l8-5" />
+    </>
+  )
 }
 
 export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {

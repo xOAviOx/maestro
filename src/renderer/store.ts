@@ -4,6 +4,7 @@ import type {
   AgentAuthStatus,
   AgentEvent,
   AgentType,
+  CreateWorkflowInput,
   CredentialInfo,
   CredentialKind,
   FanOutVariant,
@@ -11,6 +12,8 @@ import type {
   RepoInfo,
   RepoRecord,
   TestResult,
+  Workflow,
+  WorkflowPushEvent,
   Workspace,
   WorkspacePushEvent
 } from '@shared/types'
@@ -41,7 +44,20 @@ export type Toast = {
 export type WorkspaceTab = 'chat' | 'diff' | 'terminal' | 'compare'
 
 /** Which global dialog (if any) is open. Lifted here so shortcuts can open them. */
-export type ActiveDialog = 'new' | 'fanout' | 'settings' | 'shortcuts' | null
+export type ActiveDialog =
+  | 'new'
+  | 'fanout'
+  | 'settings'
+  | 'shortcuts'
+  | 'workflow-builder'
+  | null
+
+/**
+ * The active top-level view. Workspaces is the original single-agent workbench;
+ * workflows is the DAG scheduler view (Module 12/Phase 1.3). Kept in the store
+ * so the sidebar toggle and the main panel stay in sync.
+ */
+export type MainView = 'workspaces' | 'workflows'
 
 let idCounter = 0
 function nextId(): string {
@@ -79,12 +95,18 @@ interface MaestroState {
   agentAuth: Record<AgentType, AgentAuthStatus>
   /** Per-agent stored-credential metadata (Advanced headless fallback). */
   agentCredentials: Record<AgentType, CredentialInfo>
+  /** All DAG workflows (across repos; the view filters to the active repo). */
+  workflows: Workflow[]
+  /** The workflow shown in the graph view, or null for the empty state. */
+  selectedWorkflowId: string | null
 
   // ui
   loading: boolean
   error: string | null
   /** Transient notifications (newest last). Rendered by ToastViewport. */
   toasts: Toast[]
+  /** The active top-level view (workspaces vs. the DAG workflows view). */
+  view: MainView
   /** The active tab in the workspace panel (so shortcuts can switch it). */
   activeTab: WorkspaceTab
   /** Which global dialog is open (so shortcuts can open them). */
@@ -121,9 +143,26 @@ interface MaestroState {
   clearError: () => void
   pushToast: (kind: Toast['kind'], message: string) => void
   dismissToast: (id: string) => void
+  setView: (view: MainView) => void
   setActiveTab: (tab: WorkspaceTab) => void
   setActiveDialog: (dialog: ActiveDialog) => void
+  // workflows (DAG scheduler — Phase 1.3)
+  refreshWorkflows: () => Promise<void>
+  selectWorkflow: (id: string | null) => void
+  createWorkflow: (input: CreateWorkflowInput) => Promise<Workflow | null>
+  startWorkflow: (id: string) => Promise<void>
+  pauseWorkflow: (id: string) => Promise<void>
+  resumeWorkflow: (id: string) => Promise<void>
+  approveTask: (workflowId: string, taskId: string) => Promise<void>
+  rejectTask: (
+    workflowId: string,
+    taskId: string,
+    mode: 'cascade' | 'retry',
+    prompt?: string
+  ) => Promise<void>
+  retryTask: (workflowId: string, taskId: string) => Promise<void>
   _handlePush: (evt: WorkspacePushEvent) => void
+  _handleWorkflowPush: (evt: WorkflowPushEvent) => void
 }
 
 export const useStore = create<MaestroState>((set, get) => ({
@@ -149,10 +188,13 @@ export const useStore = create<MaestroState>((set, get) => ({
     codex: { agentType: 'codex', configured: false, kind: null, updatedAt: null },
     cursor: { agentType: 'cursor', configured: false, kind: null, updatedAt: null }
   },
+  workflows: [],
+  selectedWorkflowId: null,
 
   loading: false,
   error: null,
   toasts: [],
+  view: 'workspaces',
   activeTab: 'chat',
   activeDialog: null,
   _initialized: false,
@@ -163,6 +205,7 @@ export const useStore = create<MaestroState>((set, get) => ({
 
     // Subscribe to push events exactly once.
     ipc.onWorkspaceEvent((evt) => get()._handlePush(evt))
+    ipc.onWorkflowEvent((evt) => get()._handleWorkflowPush(evt))
 
     try {
       const [repos, claudeAvailable, ghAvailable] = await Promise.all([
@@ -173,6 +216,8 @@ export const useStore = create<MaestroState>((set, get) => ({
       set({ repos, claudeAvailable, ghAvailable })
       const first = repos[0]
       if (first) await get().selectRepo(first.path)
+      // Workflows span repos and drive their own worktrees; load once up front.
+      await get().refreshWorkflows()
     } catch (err) {
       get().pushToast('error', errMessage(err))
     }
@@ -431,9 +476,116 @@ export const useStore = create<MaestroState>((set, get) => ({
 
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
+  setView: (view) => set({ view }),
+
   setActiveTab: (tab) => set({ activeTab: tab }),
 
   setActiveDialog: (dialog) => set({ activeDialog: dialog }),
+
+  // --- workflows (DAG scheduler — Phase 1.3) --------------------------------
+
+  refreshWorkflows: async () => {
+    try {
+      const workflows = await ipc.listWorkflows()
+      set((s) => {
+        // Keep the current selection if it still exists; else pick the first.
+        const stillThere = workflows.some((w) => w.id === s.selectedWorkflowId)
+        return {
+          workflows,
+          selectedWorkflowId: stillThere ? s.selectedWorkflowId : (workflows[0]?.id ?? null)
+        }
+      })
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  selectWorkflow: (id) => set({ selectedWorkflowId: id }),
+
+  createWorkflow: async (input) => {
+    set({ loading: true, error: null })
+    try {
+      const wf = await ipc.createWorkflow(input)
+      // Push events only fire once a workflow is *running*; a fresh draft won't
+      // arrive that way, so splice it in and select it directly.
+      set((s) => ({
+        workflows: [wf, ...s.workflows.filter((w) => w.id !== wf.id)],
+        selectedWorkflowId: wf.id,
+        view: 'workflows'
+      }))
+      get().pushToast('success', `Workflow “${wf.name}” created.`)
+      return wf
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+      return null
+    } finally {
+      set({ loading: false })
+    }
+  },
+
+  startWorkflow: async (id) => {
+    try {
+      const wf = await ipc.startWorkflow(id)
+      get()._handleWorkflowPush({ type: 'workflow_updated', workflow: wf })
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  pauseWorkflow: async (id) => {
+    try {
+      const wf = await ipc.pauseWorkflow(id)
+      get()._handleWorkflowPush({ type: 'workflow_updated', workflow: wf })
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  resumeWorkflow: async (id) => {
+    try {
+      const wf = await ipc.resumeWorkflow(id)
+      get()._handleWorkflowPush({ type: 'workflow_updated', workflow: wf })
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  approveTask: async (workflowId, taskId) => {
+    try {
+      const wf = await ipc.approveTask(workflowId, taskId)
+      get()._handleWorkflowPush({ type: 'workflow_updated', workflow: wf })
+    } catch (err) {
+      // A merge/rebase conflict is an expected outcome, not a crash — the task's
+      // conflict sub-state (pushed separately) explains it in the UI.
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  rejectTask: async (workflowId, taskId, mode, prompt) => {
+    try {
+      const wf = await ipc.rejectTask(workflowId, taskId, mode, prompt)
+      get()._handleWorkflowPush({ type: 'workflow_updated', workflow: wf })
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  retryTask: async (workflowId, taskId) => {
+    try {
+      const wf = await ipc.retryTask(workflowId, taskId)
+      get()._handleWorkflowPush({ type: 'workflow_updated', workflow: wf })
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  _handleWorkflowPush: (evt) => {
+    set((s) => ({
+      workflows: s.workflows.some((w) => w.id === evt.workflow.id)
+        ? s.workflows.map((w) => (w.id === evt.workflow.id ? evt.workflow : w))
+        : [evt.workflow, ...s.workflows]
+    }))
+  },
 
   _handlePush: (evt) => {
     if (evt.type === 'queue_changed') {
