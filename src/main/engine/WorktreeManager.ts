@@ -126,6 +126,22 @@ export class WorktreeManager {
 
       await this.git.addWorktree(root, worktreePath, branch, baseBranch)
 
+      // Fresh-base verification (spec rule 4): the new worktree's HEAD must be
+      // exactly the CURRENT base branch HEAD at this moment. This should be
+      // impossible to violate (worktree add -b forks from the ref we pass), so
+      // any mismatch is a loud internal error, never silently stale. The sha is
+      // recorded on the workspace as the stale-base audit trail.
+      const baseHead = await this.git.revParse(root, baseBranch)
+      const worktreeHead = await this.git.revParse(worktreePath, 'HEAD')
+      if (baseHead !== worktreeHead) {
+        throw new MaestroError(
+          'INTERNAL',
+          `Fresh-base verification failed: worktree HEAD ${worktreeHead} != ${baseBranch} HEAD ${baseHead}.`,
+          { branch, baseBranch, baseHead, worktreeHead }
+        )
+      }
+      log.info('workspace.fresh-base-verified', { branch, baseBranch, baseHead })
+
       // Copy configured gitignored files (e.g. .env.local) into the worktree.
       const patterns = record?.filesToCopy ?? []
       const copied = copyMatchingFiles(root, worktreePath, patterns)
@@ -146,6 +162,7 @@ export class WorktreeManager {
         sessionId: null,
         status: 'idle',
         groupId: opts.groupId ?? null,
+        baseHeadAtCreation: baseHead,
         createdAt: now,
         archivedAt: null
       }
@@ -327,8 +344,70 @@ export class WorktreeManager {
       hasUncommittedChanges,
       changedFileCount: diff.files.length,
       baseCheckedOut: baseWt !== null,
-      baseBranch: ws.baseBranch
+      baseBranch: ws.baseBranch,
+      baseAheadCount: await this.getBaseAheadCount(id)
     }
+  }
+
+  /**
+   * How many commits the base branch has gained since this worktree diverged
+   * from it (0 = worktree is current). Best-effort: 0 whenever it can't be
+   * determined (missing worktree, unborn refs, git failure) — staleness is a
+   * hint, never a gate.
+   */
+  async getBaseAheadCount(id: string): Promise<number> {
+    const ws = await this.getWorkspace(id)
+    if (!fs.existsSync(ws.worktreePath)) return 0
+    try {
+      const mergeBase = await this.git.getMergeBase(ws.worktreePath, ws.baseBranch)
+      return await this.git.commitCountBetween(ws.worktreePath, mergeBase, ws.baseBranch)
+    } catch {
+      return 0
+    }
+  }
+
+  /**
+   * Bring a workspace's worktree current with its base branch (Phase 1.2
+   * rebase-on-stale-base). Auto-commits any uncommitted agent work first (a
+   * rebase needs a clean tree — same pre-step as mergeWorkspace), fast-paths
+   * when already current, otherwise rebases. On conflict the rebase is aborted
+   * (worktree untouched) and the conflicted files are returned for the task's
+   * conflict sub-state — never auto-resolved.
+   */
+  async rebaseOntoBase(id: string): Promise<{
+    upToDate: boolean
+    rebased: boolean
+    conflicted: string[]
+    committed: boolean
+  }> {
+    const ws = await this.getWorkspace(id)
+    return withLock(ws.repoPath, async () => {
+      if (!fs.existsSync(ws.worktreePath)) {
+        // Nothing on disk to rebase (already archived?) — treat as current.
+        return { upToDate: true, rebased: false, conflicted: [], committed: false }
+      }
+      let committed = false
+      if (await this.git.hasUncommittedChanges(ws.worktreePath)) {
+        committed = await this.git.commitAll(ws.worktreePath, `Maestro: ${ws.name} (auto-commit)`)
+      }
+      const baseHead = await this.git.revParse(ws.repoPath, ws.baseBranch)
+      const mergeBase = await this.git.getMergeBase(ws.worktreePath, ws.baseBranch)
+      if (baseHead === mergeBase) {
+        return { upToDate: true, rebased: false, conflicted: [], committed }
+      }
+      const result = await this.git.rebase(ws.worktreePath, ws.baseBranch)
+      if (!result.ok) {
+        log.warn('workspace.rebase-conflict', {
+          id,
+          branch: ws.branch,
+          baseBranch: ws.baseBranch,
+          files: result.conflicted.length
+        })
+        return { upToDate: false, rebased: false, conflicted: result.conflicted, committed }
+      }
+      log.info('workspace.rebased', { id, branch: ws.branch, baseBranch: ws.baseBranch })
+      return { upToDate: false, rebased: true, conflicted: [], committed }
+    })
   }
 
   /** Persisted history of review outcomes (merges + PRs) for a workspace, newest first. */

@@ -146,6 +146,10 @@ function migrate(db: Db): void {
   // so older databases upgrade in place without losing rows.
   addColumnIfMissing(db, 'workspaces', 'group_id', 'TEXT')
   addColumnIfMissing(db, 'repos', 'test_command', 'TEXT')
+  // Module 14 (Phase 1.2) — conflict sub-state (JSON TaskConflict) on tasks, and
+  // the base HEAD sha captured at worktree creation (fresh-base audit trail).
+  addColumnIfMissing(db, 'tasks', 'conflict', 'TEXT')
+  addColumnIfMissing(db, 'workspaces', 'base_head_at_creation', 'TEXT')
 }
 
 /** Add `column` to `table` if it doesn't already exist. SQLite has no

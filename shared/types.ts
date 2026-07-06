@@ -105,6 +105,12 @@ export const WorkspaceSchema = z.object({
   /** Fan-out group id: set when this workspace is one variant of a fan-out
    * task (sibling variants share it). Null for standalone workspaces. */
   groupId: z.string().nullable(),
+  /**
+   * Base branch HEAD sha captured (and verified) when the worktree was created —
+   * the fresh-base audit trail for stale-base detection. Null on legacy rows
+   * created before Phase 1.2.
+   */
+  baseHeadAtCreation: z.string().nullable(),
   createdAt: z.string(),
   archivedAt: z.string().nullable()
 })
@@ -378,6 +384,15 @@ export const WorkspacePushEventSchema = z.discriminatedUnion('type', [
     type: z.literal('usage_recorded'),
     workspaceId: z.string(),
     usage: UsageEventSchema
+  }),
+  z.object({
+    /** The base branch advanced (a workflow merge landed) while this agent was
+     * still running: its worktree is now stale by `baseAheadCount` commits. The
+     * UI shows a "base advanced" badge; the worktree is rebased on completion. */
+    type: z.literal('base_advanced'),
+    workspaceId: z.string(),
+    baseBranch: z.string(),
+    baseAheadCount: z.number().int().nonnegative()
   })
 ])
 export type WorkspacePushEvent = z.infer<typeof WorkspacePushEventSchema>
@@ -488,7 +503,10 @@ export const ReviewStatusSchema = z.object({
   changedFileCount: z.number(),
   /** True if base branch is checked out in a worktree (required for merge). */
   baseCheckedOut: z.boolean(),
-  baseBranch: z.string()
+  baseBranch: z.string(),
+  /** Commits the base branch has gained since this worktree diverged from it
+   * (0 = current). Computed live; 0 when it can't be determined. */
+  baseAheadCount: z.number().int().nonnegative()
 })
 export type ReviewStatus = z.infer<typeof ReviewStatusSchema>
 
@@ -648,8 +666,12 @@ export type SetTestCommandInput = z.infer<typeof SetTestCommandInputSchema>
  *   cancelled -> cancelled by a rejection cascade or by the user
  *   failed    -> agent crashed/errored, or was interrupted by an app restart
  *
- * (The `merge-conflict` sub-state and rebase-on-stale-base handling arrive in
- * Phase 1.2; Phase 1.1 uses these eight states.)
+ * Conflicts (Phase 1.2) are a SUB-STATE, not a ninth status: a task stays
+ * `completed` with a non-null `conflict` field when its worktree could not be
+ * rebased onto the advanced base (kind 'rebase') or its approved merge hit
+ * conflicts (kind 'merge'). Children stay blocked (parent isn't `merged`), the
+ * workflow can't complete, and the worktree is kept alive for manual resolution
+ * in its terminal — after which the task is simply approved again.
  */
 export const TASK_STATUSES = [
   'blocked',
@@ -672,6 +694,26 @@ export const TERMINAL_TASK_STATUSES: readonly TaskStatus[] = [
   'failed'
 ]
 
+export const TASK_CONFLICT_KINDS = ['rebase', 'merge'] as const
+/**
+ * Why a `completed` task cannot merge yet:
+ *  - 'rebase': the base advanced while the agent ran, and rebasing the worktree
+ *    onto the new base hit conflicts (the rebase was aborted; worktree clean).
+ *  - 'merge': the approved merge into the base conflicted (the merge was
+ *    aborted; base clean) — this also blocks the repo's merge queue.
+ * Resolution: fix manually in the worktree's terminal, then approve again.
+ */
+export const TaskConflictSchema = z.object({
+  kind: z.enum(TASK_CONFLICT_KINDS),
+  /** Conflicted file paths, when git could report them. */
+  files: z.array(z.string()),
+  /** When the conflict was detected (scheduler clock, ms). */
+  at: z.number(),
+  /** Optional detail when the failure wasn't a clean conflict report. */
+  message: z.string().optional()
+})
+export type TaskConflict = z.infer<typeof TaskConflictSchema>
+
 export const TaskSchema = z.object({
   /** Unique within its workflow; referenced by siblings' `dependsOn`. */
   id: z.string().min(1),
@@ -688,6 +730,8 @@ export const TaskSchema = z.object({
   agentId: z.string().nullable(),
   /** Automatic retries already spent. Rule: 1 auto retry, then manual only. */
   retryCount: z.number().int().nonnegative(),
+  /** Non-null while a `completed` task is stuck on a rebase/merge conflict. */
+  conflict: TaskConflictSchema.nullable(),
   createdAt: z.number(),
   startedAt: z.number().nullable(),
   finishedAt: z.number().nullable(),

@@ -1,5 +1,6 @@
 import type { Db } from './Database'
-import type { Task, TaskStatus, Workflow, WorkflowStatus } from '@shared/types'
+import { TaskConflictSchema } from '@shared/types'
+import type { Task, TaskConflict, TaskStatus, Workflow, WorkflowStatus } from '@shared/types'
 
 interface WorkflowRow {
   id: string
@@ -20,6 +21,7 @@ interface TaskRow {
   status: string
   agent_id: string | null
   retry_count: number
+  conflict: string | null
   created_at: number
   started_at: number | null
   finished_at: number | null
@@ -36,6 +38,17 @@ function parseDependsOn(json: string): string[] {
   return []
 }
 
+/** Parse the persisted conflict JSON; malformed/legacy content degrades to null. */
+function parseConflict(json: string | null): TaskConflict | null {
+  if (!json) return null
+  try {
+    const parsed = TaskConflictSchema.safeParse(JSON.parse(json))
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
 function rowToTask(row: TaskRow): Task {
   return {
     id: row.id,
@@ -45,6 +58,7 @@ function rowToTask(row: TaskRow): Task {
     status: row.status as TaskStatus,
     agentId: row.agent_id,
     retryCount: row.retry_count,
+    conflict: parseConflict(row.conflict),
     createdAt: row.created_at,
     startedAt: row.started_at,
     finishedAt: row.finished_at,
@@ -76,10 +90,10 @@ export class WorkflowStore {
     const insertTask = this.db.prepare(
       `INSERT INTO tasks
          (workflow_id, id, title, prompt, depends_on, status, agent_id, retry_count,
-          created_at, started_at, finished_at, failure_reason)
+          conflict, created_at, started_at, finished_at, failure_reason)
        VALUES
          (@workflowId, @id, @title, @prompt, @dependsOn, @status, @agentId, @retryCount,
-          @createdAt, @startedAt, @finishedAt, @failureReason)`
+          @conflict, @createdAt, @startedAt, @finishedAt, @failureReason)`
     )
     const tx = this.db.transaction((wf: Workflow) => {
       insertWorkflow.run({
@@ -121,8 +135,9 @@ export class WorkflowStore {
       .prepare(
         `UPDATE tasks
            SET title = @title, prompt = @prompt, depends_on = @dependsOn, status = @status,
-               agent_id = @agentId, retry_count = @retryCount, started_at = @startedAt,
-               finished_at = @finishedAt, failure_reason = @failureReason
+               agent_id = @agentId, retry_count = @retryCount, conflict = @conflict,
+               started_at = @startedAt, finished_at = @finishedAt,
+               failure_reason = @failureReason
          WHERE workflow_id = @workflowId AND id = @id`
       )
       .run(this.taskParams(workflowId, task))
@@ -156,6 +171,7 @@ export class WorkflowStore {
       status: t.status,
       agentId: t.agentId,
       retryCount: t.retryCount,
+      conflict: t.conflict ? JSON.stringify(t.conflict) : null,
       createdAt: t.createdAt,
       startedAt: t.startedAt,
       finishedAt: t.finishedAt,

@@ -13,6 +13,7 @@ interface WorkspaceRow {
   session_id: string | null
   status: string
   group_id: string | null
+  base_head_at_creation: string | null
   created_at: string
   archived_at: string | null
 }
@@ -30,6 +31,7 @@ function rowToWorkspace(row: WorkspaceRow): Workspace {
     sessionId: row.session_id,
     status: row.status as WorkspaceStatus,
     groupId: row.group_id,
+    baseHeadAtCreation: row.base_head_at_creation,
     createdAt: row.created_at,
     archivedAt: row.archived_at
   }
@@ -48,10 +50,12 @@ export class WorkspaceStore {
       .prepare(
         `INSERT INTO workspaces
            (id, repo_path, repo_name, name, branch, base_branch, worktree_path,
-            agent_type, session_id, status, group_id, created_at, archived_at)
+            agent_type, session_id, status, group_id, base_head_at_creation,
+            created_at, archived_at)
          VALUES
            (@id, @repoPath, @repoName, @name, @branch, @baseBranch, @worktreePath,
-            @agentType, @sessionId, @status, @groupId, @createdAt, @archivedAt)`
+            @agentType, @sessionId, @status, @groupId, @baseHeadAtCreation,
+            @createdAt, @archivedAt)`
       )
       .run(ws)
   }

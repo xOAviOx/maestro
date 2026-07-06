@@ -230,6 +230,28 @@ export class GitService {
     return { ok: false, conflicted }
   }
 
+  /**
+   * Rebase the worktree's branch onto `baseBranch`. Mirrors merge()'s contract:
+   * on conflict the rebase is ABORTED (leaving the worktree exactly as it was)
+   * and the conflicted files are returned — we never leave a rebase in progress.
+   * Requires a clean worktree (commit first).
+   */
+  async rebase(
+    worktreePath: string,
+    baseBranch: string
+  ): Promise<{ ok: boolean; conflicted: string[] }> {
+    const res = await this.run(worktreePath, ['rebase', baseBranch], true)
+    if (res.exitCode === 0) return { ok: true, conflicted: [] }
+    const conflicted = await this.listConflictedFiles(worktreePath)
+    await this.run(worktreePath, ['rebase', '--abort'], true)
+    return { ok: false, conflicted }
+  }
+
+  /** Resolve a ref (branch, HEAD, sha) to its full commit sha. */
+  async revParse(cwd: string, ref: string): Promise<string> {
+    return (await this.run(cwd, ['rev-parse', ref])).stdout.trim()
+  }
+
   async listRemotes(cwd: string): Promise<string[]> {
     const res = await this.run(cwd, ['remote'], true)
     return splitLines(res.stdout)
