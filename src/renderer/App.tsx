@@ -4,6 +4,7 @@ import { useShortcuts } from './hooks/useShortcuts'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar'
 import { WorkspaceView } from './components/WorkspaceView'
 import { WorkflowView } from './components/WorkflowView'
+import { DashboardView } from './components/dashboard/DashboardView'
 import { NewWorkspaceDialog } from './components/NewWorkspaceDialog'
 import { FanOutDialog } from './components/FanOutDialog'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -29,7 +30,13 @@ export default function App(): JSX.Element {
     <div className="flex h-full w-full overflow-hidden bg-bg text-content">
       <WorkspaceSidebar />
       <main className="flex min-w-0 flex-1 flex-col">
-        {view === 'workflows' ? <WorkflowView /> : <WorkspaceView />}
+        {view === 'workflows' ? (
+          <WorkflowView />
+        ) : view === 'dashboard' ? (
+          <DashboardView />
+        ) : (
+          <WorkspaceView />
+        )}
       </main>
 
       {activeDialog === 'new' && <NewWorkspaceDialog onClose={closeDialog} />}

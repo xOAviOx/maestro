@@ -7,6 +7,7 @@ import {
   FileDiffSchema,
   MergeResultSchema,
   PingResponseSchema,
+  PricingTableSchema,
   PullRequestResultSchema,
   QueuedJobSchema,
   RepoInfoSchema,
@@ -37,6 +38,7 @@ import {
   type MaestroErrorCode,
   type MergeResult,
   type PingResponse,
+  type PricingTable,
   type PullRequestResult,
   type QueuedJob,
   type RepoInfo,
@@ -235,6 +237,11 @@ export const ipc = {
     call(window.maestro.listUsage(input), z.array(UsageEventSchema)),
   getUsageSummary: (workspaceId?: string): Promise<UsageSummary> =>
     call(window.maestro.getUsageSummary(workspaceId), UsageSummarySchema),
+  getSessionStart: (): Promise<string> => call(window.maestro.getSessionStart(), z.string()),
+  getPricing: (): Promise<PricingTable> =>
+    call(window.maestro.getPricing(), PricingTableSchema),
+  setPricing: (table: PricingTable): Promise<PricingTable> =>
+    call(window.maestro.setPricing(table), PricingTableSchema),
 
   // terminal
   startTerminal: (workspaceId: string, cols: number, rows: number): Promise<TerminalStartResult> =>

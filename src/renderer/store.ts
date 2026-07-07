@@ -8,10 +8,12 @@ import type {
   CredentialInfo,
   CredentialKind,
   FanOutVariant,
+  PricingTable,
   QueuedJob,
   RepoInfo,
   RepoRecord,
   TestResult,
+  UsageEvent,
   Workflow,
   WorkflowPushEvent,
   Workspace,
@@ -57,7 +59,11 @@ export type ActiveDialog =
  * workflows is the DAG scheduler view (Module 12/Phase 1.3). Kept in the store
  * so the sidebar toggle and the main panel stay in sync.
  */
-export type MainView = 'workspaces' | 'workflows'
+export type MainView = 'workspaces' | 'workflows' | 'dashboard'
+
+/** Most recent usage events kept in the renderer for the dashboard. Persisted
+ * history lives in main (SQLite); this cap bounds the live working set. */
+const USAGE_EVENT_CAP = 5000
 
 let idCounter = 0
 function nextId(): string {
@@ -99,6 +105,14 @@ interface MaestroState {
   workflows: Workflow[]
   /** The workflow shown in the graph view, or null for the empty state. */
   selectedWorkflowId: string | null
+  /** Usage samples for the dashboard (newest first), seeded from persisted
+   * history and appended live from `usage_recorded` pushes. */
+  usageEvents: UsageEvent[]
+  /** Active model pricing (override or defaults) for per-event cost math. Null
+   * until loaded; the dashboard flags costs as unavailable meanwhile. */
+  pricing: PricingTable | null
+  /** ISO time main started this session — the boundary "this session" tiles use. */
+  sessionStartedAt: string | null
 
   // ui
   loading: boolean
@@ -161,6 +175,9 @@ interface MaestroState {
     prompt?: string
   ) => Promise<void>
   retryTask: (workflowId: string, taskId: string) => Promise<void>
+  // usage & cost dashboard (Phase 2.2)
+  refreshUsage: () => Promise<void>
+  savePricing: (table: PricingTable) => Promise<void>
   _handlePush: (evt: WorkspacePushEvent) => void
   _handleWorkflowPush: (evt: WorkflowPushEvent) => void
 }
@@ -190,6 +207,9 @@ export const useStore = create<MaestroState>((set, get) => ({
   },
   workflows: [],
   selectedWorkflowId: null,
+  usageEvents: [],
+  pricing: null,
+  sessionStartedAt: null,
 
   loading: false,
   error: null,
@@ -221,6 +241,20 @@ export const useStore = create<MaestroState>((set, get) => ({
     } catch (err) {
       get().pushToast('error', errMessage(err))
     }
+    // Dashboard data (session boundary, pricing, usage history) is best-effort;
+    // never fail init over it.
+    void (async () => {
+      try {
+        const [sessionStartedAt, pricing] = await Promise.all([
+          ipc.getSessionStart(),
+          ipc.getPricing()
+        ])
+        set({ sessionStartedAt, pricing })
+      } catch (err) {
+        get().pushToast('error', errMessage(err))
+      }
+      await get().refreshUsage()
+    })()
     // Auth status is non-blocking and best-effort; never fail init over it.
     void get().refreshAgentAuth()
   },
@@ -579,6 +613,27 @@ export const useStore = create<MaestroState>((set, get) => ({
     }
   },
 
+  // --- usage & cost dashboard (Phase 2.2) -----------------------------------
+
+  refreshUsage: async () => {
+    try {
+      const usageEvents = await ipc.listUsage({ limit: USAGE_EVENT_CAP })
+      set({ usageEvents })
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
+  savePricing: async (table) => {
+    try {
+      const pricing = await ipc.setPricing(table)
+      set({ pricing })
+      get().pushToast('success', 'Pricing rates saved.')
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
   _handleWorkflowPush: (evt) => {
     set((s) => ({
       workflows: s.workflows.some((w) => w.id === evt.workflow.id)
@@ -613,8 +668,11 @@ export const useStore = create<MaestroState>((set, get) => ({
       return
     }
     if (evt.type === 'usage_recorded') {
-      // Module 13: samples are persisted in main; the dashboard (Phase 2.2)
-      // will consume these live. Nothing to reflect in the store yet.
+      // Persisted in main; mirror it into the live working set (newest first,
+      // bounded) so the dashboard updates without a re-fetch.
+      set((s) => ({
+        usageEvents: [evt.usage, ...s.usageEvents].slice(0, USAGE_EVENT_CAP)
+      }))
       return
     }
     // agent_event -> append to transcript
