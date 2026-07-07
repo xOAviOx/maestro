@@ -39,7 +39,11 @@ import {
 const MAX_DIFF_BYTES = 1_500_000
 
 function hasNullByte(s: string): boolean {
-  return s.includes('')
+  // NUL written as a \u escape so the literal can't be silently dropped by
+  // tools that strip raw control bytes. Previously a stray edit turned this
+  // into includes('') — an empty string matches every file, so every text
+  // diff was wrongly flagged binary.
+  return s.includes('\u0000')
 }
 
 /**
