@@ -21,6 +21,7 @@ import {
   SetCredentialInputSchema,
   SetFilesToCopyInputSchema,
   SetTestCommandInputSchema,
+  PricingTableSchema,
   StartAgentInputSchema,
   TaskRefInputSchema,
   TerminalInputSchema,
@@ -31,12 +32,13 @@ import {
   WorkflowIdInputSchema,
   WorkspaceIdInputSchema,
   type PingResponse,
+  type PricingTable,
   type TerminalStartResult,
   type UsageEvent
 } from '@shared/types'
 import { toErrorPayload } from '../engine/errors'
 import { getAgentAuthStatus, resolveLoginCommand } from '../harness'
-import { loadPricing, summarizeUsage } from '../engine/pricing'
+import { loadPricing, summarizeUsage, writePricing } from '../engine/pricing'
 import { maestroHome } from '../engine/util/paths'
 import type { Engine } from '../engine'
 import type { WorkspaceSupervisor } from '../engine/WorkspaceSupervisor'
@@ -60,6 +62,11 @@ export interface IpcDeps {
  */
 export function registerIpcHandlers(deps: IpcDeps): void {
   const { engine, supervisor, scheduler, ptyManager } = deps
+
+  // Boundary the dashboard's "this session" tiles use. Captured once at handler
+  // registration (main-process boot) — persisted usage from earlier runs has an
+  // earlier createdAt and so falls into History, not the live session.
+  const sessionStartedAt = new Date().toISOString()
 
   // Wrap a handler so all errors become serializable ErrorPayloads.
   const handle = <T>(
@@ -315,6 +322,12 @@ export function registerIpcHandlers(deps: IpcDeps): void {
     // Pricing is re-read per call so edits to the override file apply without
     // a restart (the file is tiny; this is a user-initiated query).
     return summarizeUsage(events, loadPricing())
+  })
+  handle(IpcChannels.usageSessionStart, (): string => sessionStartedAt)
+  handle(IpcChannels.usagePricingGet, (): PricingTable => loadPricing())
+  handle(IpcChannels.usagePricingSet, (raw): PricingTable => {
+    const table = PricingTableSchema.parse(raw)
+    return writePricing(table)
   })
 
   // --- terminal (node-pty) ---

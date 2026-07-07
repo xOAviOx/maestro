@@ -88,6 +88,7 @@ export function SettingsDialog({ onClose }: { onClose: () => void }): JSX.Elemen
             provider and no tokens are stored here.
           </p>
           <RepoSettings />
+          <PricingSettings />
           {AGENT_TYPES.map((t) => (
             <AccountRow
               key={t}
@@ -334,6 +335,112 @@ function RepoSettings(): JSX.Element | null {
         Runs in each workspace&apos;s worktree via your shell. Leave empty to disable. Used by
         &ldquo;Run tests&rdquo; and the fan-out comparison view.
       </p>
+    </div>
+  )
+}
+
+const RATE_FIELDS = [
+  { key: 'input', label: 'Input' },
+  { key: 'output', label: 'Output' },
+  { key: 'cacheRead', label: 'Cache read' },
+  { key: 'cacheWrite', label: 'Cache write' }
+] as const
+
+/**
+ * Editor for the model pricing table (USD per 1M tokens) that the dashboard uses
+ * for cost math. Edits are persisted to the user override file via `setPricing`;
+ * collapsed by default since most users keep the seeded rates. Prices change, so
+ * this is the intended place to keep them current.
+ */
+function PricingSettings(): JSX.Element {
+  const pricing = useStore((s) => s.pricing)
+  const savePricing = useStore((s) => s.savePricing)
+  const [open, setOpen] = useState(false)
+  // Local editable copy, seeded from the loaded table. Re-seeded whenever the
+  // section is opened so it reflects the latest saved rates.
+  const [draft, setDraft] = useState(() => pricing)
+  const [saving, setSaving] = useState(false)
+
+  const models = draft ? Object.keys(draft.models).sort() : []
+
+  const setRate = (model: string, field: (typeof RATE_FIELDS)[number]['key'], raw: string): void => {
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n < 0) return
+    setDraft((d) => {
+      if (!d) return d
+      const cur = d.models[model]
+      if (!cur) return d
+      return { ...d, models: { ...d.models, [model]: { ...cur, [field]: n } } }
+    })
+  }
+
+  const save = async (): Promise<void> => {
+    if (!draft) return
+    setSaving(true)
+    await savePricing({ ...draft, lastVerified: new Date().toISOString().slice(0, 10) })
+    setSaving(false)
+  }
+
+  return (
+    <div className="rounded-xl border border-hair bg-surface-2 px-4 py-3">
+      <button
+        className="flex w-full items-center gap-2 text-left"
+        onClick={() => {
+          setDraft(pricing)
+          setOpen((v) => !v)
+        }}
+      >
+        <Icon name={open ? 'chevronDown' : 'chevronRight'} size={13} />
+        <span className="font-medium text-content">Model pricing</span>
+        <span className="text-[11px] text-content-faint">
+          USD / 1M tokens{pricing ? ` · verified ${pricing.lastVerified}` : ''}
+        </span>
+      </button>
+
+      {open && draft && (
+        <div className="mt-3 space-y-2">
+          <div className="grid grid-cols-[1.4fr_repeat(4,1fr)] gap-2 text-[11px] uppercase tracking-wide text-content-faint">
+            <span>Model</span>
+            {RATE_FIELDS.map((f) => (
+              <span key={f.key} className="text-right">
+                {f.label}
+              </span>
+            ))}
+          </div>
+          {models.map((model) => {
+            const rates = draft.models[model]
+            if (!rates) return null
+            return (
+              <div key={model} className="grid grid-cols-[1.4fr_repeat(4,1fr)] items-center gap-2">
+                <span className="truncate font-mono text-xs text-content-muted" title={model}>
+                  {model}
+                </span>
+                {RATE_FIELDS.map((f) => (
+                  <Input
+                    key={f.key}
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    className="py-1 text-right font-mono text-xs"
+                    value={String(rates[f.key])}
+                    onChange={(e) => setRate(model, f.key, e.target.value)}
+                    aria-label={`${model} ${f.label} rate`}
+                  />
+                ))}
+              </div>
+            )
+          })}
+          <div className="flex items-center justify-between pt-1">
+            <p className="text-[11px] text-content-faint">
+              Unknown models fall back to the closest prefix match; the agent CLI&apos;s own reported
+              cost always wins when present.
+            </p>
+            <Button size="sm" variant="primary" className="shrink-0" onClick={() => void save()}>
+              {saving ? 'Saving…' : 'Save rates'}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import type {
   CreateWorkspaceInput,
   EnqueueJobInput,
   FanOutInput,
+  PricingTable,
   TerminalDataEvent,
   TerminalExitEvent,
   UsageListInput,
@@ -121,6 +122,9 @@ const api: MaestroApi = {
     ipcRenderer.invoke(IpcChannels.usageList, input ?? {}),
   getUsageSummary: (workspaceId?: string) =>
     ipcRenderer.invoke(IpcChannels.usageSummary, workspaceId ? { workspaceId } : {}),
+  getSessionStart: () => ipcRenderer.invoke(IpcChannels.usageSessionStart),
+  getPricing: () => ipcRenderer.invoke(IpcChannels.usagePricingGet),
+  setPricing: (table: PricingTable) => ipcRenderer.invoke(IpcChannels.usagePricingSet, table),
 
   // integrations
   isGhAvailable: () => ipcRenderer.invoke(IpcChannels.ghAvailable),

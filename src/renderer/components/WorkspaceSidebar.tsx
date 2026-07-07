@@ -1,9 +1,10 @@
 import type { Workflow, Workspace } from '@shared/types'
 import { useStore } from '../store'
 import { StatusDot } from './StatusDot'
+import { CostBadge } from './dashboard/CostBadge'
 import { Button } from './ui/Button'
 import { IconButton } from './ui/IconButton'
-import { Icon } from './ui/Icon'
+import { Icon, type IconName } from './ui/Icon'
 import { Select } from './ui/Field'
 import { Tooltip } from './ui/Tooltip'
 import { cn } from './ui/cn'
@@ -67,10 +68,11 @@ export function WorkspaceSidebar(): JSX.Element {
         </Tooltip>
       </div>
 
-      {/* Workspaces / Workflows switch */}
+      {/* Workspaces / Workflows / Dashboard switch */}
       <div className="mx-3 mb-2 flex rounded-lg border border-hair bg-surface-2 p-0.5 text-xs">
         <ViewTab icon="terminal" label="Workspaces" active={view === 'workspaces'} onClick={() => setView('workspaces')} />
         <ViewTab icon="graph" label="Workflows" active={view === 'workflows'} onClick={() => setView('workflows')} />
+        <ViewTab icon="chart" label="Cost" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
       </div>
 
       {view === 'workspaces' ? (
@@ -147,8 +149,10 @@ export function WorkspaceSidebar(): JSX.Element {
             )}
           </div>
         </>
-      ) : (
+      ) : view === 'workflows' ? (
         <WorkflowList />
+      ) : (
+        <DashboardRail />
       )}
 
       <div className="space-y-1 border-t border-hair px-3 py-2">
@@ -203,7 +207,44 @@ function WorkspaceRow({
         <span className="block truncate">{workspace.name}</span>
         <span className="block truncate font-mono text-xs text-content-faint">{workspace.branch}</span>
       </span>
+      <CostBadge workspaceId={workspace.id} className="shrink-0" />
     </button>
+  )
+}
+
+/**
+ * Dashboard rail: agent cards with live cost badges (the same rows as the
+ * workspaces list, minus create controls). Reinforces item 6 of the spec —
+ * every agent card carries its live cost — right next to the cost view.
+ */
+function DashboardRail(): JSX.Element {
+  const workspaces = useStore((s) => s.workspaces)
+  const selectedWorkspaceId = useStore((s) => s.selectedWorkspaceId)
+  const selectWorkspace = useStore((s) => s.selectWorkspace)
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+      <div className="px-2 py-2 text-[11px] font-medium uppercase tracking-wide text-content-faint">
+        Agents · live cost
+      </div>
+      {workspaces.length === 0 ? (
+        <p className="px-2 py-6 text-center text-xs text-content-faint">
+          No agents in this repo yet.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {workspaces.map((w) => (
+            <li key={w.id}>
+              <WorkspaceRow
+                workspace={w}
+                selected={w.id === selectedWorkspaceId}
+                onSelect={selectWorkspace}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
 
@@ -252,7 +293,7 @@ function ViewTab({
   active,
   onClick
 }: {
-  icon: 'terminal' | 'graph'
+  icon: IconName
   label: string
   active: boolean
   onClick: () => void

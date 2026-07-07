@@ -10,6 +10,7 @@ import type {
   FileDiff,
   MergeResult,
   PingResponse,
+  PricingTable,
   PullRequestResult,
   QueuedJob,
   RepoInfo,
@@ -103,9 +104,12 @@ export const IpcChannels = {
   taskRetry: 'maestro:task:retry',
   taskCascadePreview: 'maestro:task:cascadePreview',
 
-  // usage & cost (Module 13 — collection pipeline)
+  // usage & cost (Module 13 — collection pipeline; Phase 2.2 — dashboard)
   usageList: 'maestro:usage:list',
   usageSummary: 'maestro:usage:summary',
+  usageSessionStart: 'maestro:usage:sessionStart',
+  usagePricingGet: 'maestro:usage:pricingGet',
+  usagePricingSet: 'maestro:usage:pricingSet',
 
   // push channels (main -> renderer)
   workspaceEvent: 'maestro:workspace-event',
@@ -235,6 +239,14 @@ export interface MaestroApi {
   /** Token totals + best-effort cost rollup (per-event model rates; the CLI's
    * own reported cost wins when present). Omit workspaceId for all usage. */
   getUsageSummary(workspaceId?: string): Promise<UsageSummary>
+  /** ISO time the main process (this session) started — the boundary the
+   * dashboard's "this session" tiles use so persisted history is excluded. */
+  getSessionStart(): Promise<string>
+  /** The active pricing table (user override if present, else built-in defaults);
+   * used by the dashboard for per-event cost math and by the rates editor. */
+  getPricing(): Promise<PricingTable>
+  /** Persist an edited pricing table to the user override file; returns it. */
+  setPricing(table: PricingTable): Promise<PricingTable>
 
   // --- integrations ---
   isGhAvailable(): Promise<boolean>

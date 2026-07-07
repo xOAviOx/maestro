@@ -13,6 +13,8 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/main/**/*.test.ts']
+    // Pure main-process logic plus the pure shared cost/usage helpers the
+    // dashboard (Phase 2.2) relies on. Both are React/Node-free.
+    include: ['src/main/**/*.test.ts', 'shared/**/*.test.ts']
   }
 })

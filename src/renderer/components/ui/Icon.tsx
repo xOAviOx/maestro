@@ -34,6 +34,7 @@ export type IconName =
   | 'spark'
   | 'pause'
   | 'graph'
+  | 'chart'
 
 /** Path/element markup per icon (inside a 24×24 stroke viewBox). */
 const PATHS: Record<IconName, JSX.Element> = {
@@ -133,6 +134,14 @@ const PATHS: Record<IconName, JSX.Element> = {
       <circle cx="18" cy="12" r="2" />
       <circle cx="6" cy="19" r="2" />
       <path d="M8 6l8 5M8 18l8-5" />
+    </>
+  ),
+  chart: (
+    <>
+      <path d="M4 4v16h16" />
+      <rect x="7" y="11" width="3" height="6" rx="0.5" />
+      <rect x="12" y="7" width="3" height="10" rx="0.5" />
+      <rect x="17" y="13" width="3" height="4" rx="0.5" />
     </>
   )
 }
