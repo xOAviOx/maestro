@@ -1,5 +1,11 @@
 import { randomUUID } from 'crypto'
-import { createHarness, type ClaudeCodeHarnessOptions, type Harness } from '../harness'
+import {
+  createHarness,
+  type ClaudeCodeHarnessOptions,
+  type Harness,
+  type PermissionDecision,
+  type RequestPermission
+} from '../harness'
 import { credentialEnvVar } from '../harness'
 import { log } from '../log'
 import { MaestroError, toMaestroError } from './errors'
@@ -23,6 +29,32 @@ export type HarnessFactory = (type: AgentType, opts?: ClaudeCodeHarnessOptions) 
 interface RunHandle {
   harness: Harness
   startedAt: string
+}
+
+/**
+ * Tool names whose calls pause for interactive approval on gated (chat) runs:
+ * everything that writes to the worktree or runs a shell. Reads (Read/Grep/Glob/
+ * WebFetch/…) auto-approve inside the CLI and never reach us. `PowerShell` is the
+ * shell tool on Windows; `Bash` on macOS/Linux — both are gated. Matched
+ * case-insensitively so a differently-cased variant can't slip through.
+ */
+const GATED_TOOLS = new Set([
+  'bash',
+  'powershell',
+  'write',
+  'edit',
+  'multiedit',
+  'notebookedit'
+])
+
+/** Whether a tool call must be approved by the user before it runs. */
+export function requiresApproval(toolName: string): boolean {
+  return GATED_TOOLS.has(toolName.trim().toLowerCase())
+}
+
+/** Key a pending approval by its workspace + request id. */
+function permKey(workspaceId: string, requestId: string): string {
+  return `${workspaceId}::${requestId}`
 }
 
 /**
@@ -53,6 +85,12 @@ export class WorkspaceSupervisor {
   private readonly listeners = new Set<SupervisorListener>()
   /** Pending jobs, FIFO. In-memory for the session (not yet persisted). */
   private queue: QueuedJob[] = []
+  /**
+   * Unresolved tool-approval prompts, keyed `${workspaceId}::${requestId}`. The
+   * value resolves the harness's paused `requestPermission` promise. Cleared
+   * (as `expired`) when a run ends so a killed turn never leaks a hung promise.
+   */
+  private readonly pendingPermissions = new Map<string, (d: PermissionDecision) => void>()
 
   constructor(
     engine: Engine,
@@ -87,7 +125,12 @@ export class WorkspaceSupervisor {
    * The turn's progress, completion, errors, and cancellation are surfaced via
    * push events + status changes — never thrown from the background loop.
    */
-  async startRun(workspaceId: string, prompt: string, model?: string): Promise<void> {
+  async startRun(
+    workspaceId: string,
+    prompt: string,
+    model?: string,
+    gateApprovals = false
+  ): Promise<void> {
     if (this.active.has(workspaceId) || this.starting.has(workspaceId)) {
       throw new MaestroError('INTERNAL', 'An agent is already running for this workspace.', {
         workspaceId
@@ -110,9 +153,91 @@ export class WorkspaceSupervisor {
     this.setStatus(workspaceId, 'running')
 
     const env = this.credentialEnv(ws.agentType)
+    // Interactive chat runs gate writes/shell behind approval; autonomous runs
+    // (workflows, fan-out) pass no callback and so never pause.
+    const requestPermission = gateApprovals
+      ? this.makeRequestPermission(workspaceId)
+      : undefined
 
     // Fire-and-forget: each concurrent run is fully independent.
-    void this.runLoop(workspaceId, ws.worktreePath, ws.sessionId, harness, prompt, model, env)
+    void this.runLoop(
+      workspaceId,
+      ws.worktreePath,
+      ws.sessionId,
+      harness,
+      prompt,
+      model,
+      env,
+      requestPermission
+    )
+  }
+
+  /**
+   * Build the per-run approval callback. Non-gated tools (reads) auto-approve
+   * instantly; gated tools (writes / shell) emit a `permission_request` event
+   * and return a promise that stays pending until the user answers (via
+   * `resolvePermission`) or the run ends (`clearPendingPermissions`).
+   */
+  private makeRequestPermission(workspaceId: string): RequestPermission {
+    return ({ toolName, input }) => {
+      if (!requiresApproval(toolName)) return Promise.resolve({ behavior: 'allow' })
+      const requestId = randomUUID()
+      this.emit({
+        type: 'agent_event',
+        workspaceId,
+        event: { kind: 'permission_request', requestId, toolName, input }
+      })
+      return new Promise<PermissionDecision>((resolve) => {
+        this.pendingPermissions.set(permKey(workspaceId, requestId), resolve)
+      })
+    }
+  }
+
+  /**
+   * Deliver the user's Approve/Reject answer to a paused tool call. No-op if the
+   * request is unknown (already settled, or the run ended) so a stale click is
+   * harmless.
+   */
+  resolvePermission(workspaceId: string, requestId: string, decision: 'approve' | 'reject'): void {
+    this.settlePermission(workspaceId, requestId, decision === 'approve' ? 'approved' : 'rejected')
+  }
+
+  /** Resolve a pending approval and broadcast the outcome so the UI freezes it. */
+  private settlePermission(
+    workspaceId: string,
+    requestId: string,
+    outcome: 'approved' | 'rejected' | 'expired'
+  ): void {
+    const key = permKey(workspaceId, requestId)
+    const resolve = this.pendingPermissions.get(key)
+    if (!resolve) return
+    this.pendingPermissions.delete(key)
+    this.emit({
+      type: 'agent_event',
+      workspaceId,
+      event: { kind: 'permission_resolved', requestId, decision: outcome }
+    })
+    resolve(
+      outcome === 'approved'
+        ? { behavior: 'allow' }
+        : {
+            behavior: 'deny',
+            message:
+              outcome === 'expired'
+                ? 'The run ended before this was approved.'
+                : 'Rejected by the user in Maestro.'
+          }
+    )
+  }
+
+  /** Settle every still-pending approval for a workspace as `expired`. */
+  private clearPendingPermissions(workspaceId: string): void {
+    const prefix = `${workspaceId}::`
+    for (const key of [...this.pendingPermissions.keys()]) {
+      if (key.startsWith(prefix)) {
+        this.settlePermission(workspaceId, key.slice(prefix.length), 'expired')
+      }
+    }
   }
 
   /**
@@ -136,7 +261,8 @@ export class WorkspaceSupervisor {
     harness: Harness,
     prompt: string,
     model?: string,
-    env?: Record<string, string>
+    env?: Record<string, string>,
+    requestPermission?: RequestPermission
   ): Promise<void> {
     try {
       const { sessionId } = await harness.run(
@@ -145,6 +271,7 @@ export class WorkspaceSupervisor {
           prompt,
           ...(model ? { model } : {}),
           ...(env ? { env } : {}),
+          ...(requestPermission ? { requestPermission } : {}),
           resumeSessionId
         },
         (event) => {
@@ -170,6 +297,9 @@ export class WorkspaceSupervisor {
     } finally {
       this.cancelRequested.delete(workspaceId)
       this.active.delete(workspaceId)
+      // Release any tool prompt still waiting on this (now-ended) run so its
+      // harness promise can't leak, and the UI stops showing live buttons.
+      this.clearPendingPermissions(workspaceId)
       // A run just ended: the next sequential job for this workspace, or any
       // dependent job now unblocked, may be runnable.
       this.pump()
@@ -212,6 +342,7 @@ export class WorkspaceSupervisor {
       prompt: input.prompt,
       ...(input.model ? { model: input.model } : {}),
       dependsOnWorkspaceId: input.dependsOnWorkspaceId ?? null,
+      gateApprovals: input.gateApprovals ?? false,
       createdAt: new Date().toISOString()
     }
     this.queue.push(job)
@@ -275,7 +406,12 @@ export class WorkspaceSupervisor {
         // synchronously (this.starting) so the re-scan won't double-start it.
         this.queue = this.queue.filter((j) => j.id !== job.id)
         this.emitQueue()
-        void this.startRun(job.workspaceId, job.prompt, job.model).catch((err) => {
+        void this.startRun(
+          job.workspaceId,
+          job.prompt,
+          job.model,
+          job.gateApprovals ?? false
+        ).catch((err) => {
           log.warn('supervisor.queued-start-failed', {
             jobId: job.id,
             message: toMaestroError(err).message
