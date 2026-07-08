@@ -7,8 +7,26 @@ import { Icon } from './ui/Icon'
 import { Textarea, Select } from './ui/Field'
 import { cn } from './ui/cn'
 
-function AgentEventView({ event }: { event: AgentEvent }): JSX.Element | null {
+function AgentEventView({
+  event,
+  workspaceId
+}: {
+  event: AgentEvent
+  workspaceId: string
+}): JSX.Element | null {
   switch (event.kind) {
+    case 'permission_request':
+      return (
+        <PermissionRequestView
+          workspaceId={workspaceId}
+          requestId={event.requestId}
+          toolName={event.toolName}
+          input={event.input}
+        />
+      )
+    case 'permission_resolved':
+      // Settled in the store (freezes the request bubble); nothing to render here.
+      return null
     case 'session_started':
       return (
         <div className="text-[11px] uppercase tracking-wide text-content-faint">session started</div>
@@ -62,6 +80,71 @@ function AgentEventView({ event }: { event: AgentEvent }): JSX.Element | null {
   }
 }
 
+/** A paused gated tool call (writes / shell) with live Approve / Reject. Once
+ * answered — by the user, or by the run ending — the buttons freeze into the
+ * outcome so the transcript stays a faithful record. */
+function PermissionRequestView({
+  workspaceId,
+  requestId,
+  toolName,
+  input
+}: {
+  workspaceId: string
+  requestId: string
+  toolName: string
+  input: unknown
+}): JSX.Element {
+  const resolution = useStore((s) => s.permissionResolutions[requestId])
+  const respond = useStore((s) => s.respondPermission)
+  const hint = renderInputHint(input)
+
+  return (
+    <div className="max-w-[85%] self-start rounded-lg border border-status-awaiting/40 bg-status-awaiting/10 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs text-content">
+        <Icon name="wrench" size={13} />
+        <span>
+          Run <span className="font-semibold text-accent">{toolName}</span>?
+        </span>
+        {hint ? <span className="text-content-muted">{hint}</span> : null}
+      </div>
+      {resolution ? (
+        <div
+          className={cn(
+            'mt-1.5 flex items-center gap-1 text-xs font-medium',
+            resolution === 'approved' ? 'text-status-done' : 'text-status-error'
+          )}
+        >
+          <Icon name={resolution === 'approved' ? 'check' : 'close'} size={12} />
+          {resolution === 'approved'
+            ? 'Approved'
+            : resolution === 'rejected'
+              ? 'Rejected'
+              : 'Expired — run ended before you answered'}
+        </div>
+      ) : (
+        <div className="mt-2 flex gap-2">
+          <Button
+            size="sm"
+            variant="success"
+            onClick={() => void respond(workspaceId, requestId, true)}
+          >
+            <Icon name="check" size={13} />
+            Approve
+          </Button>
+          <Button
+            size="sm"
+            variant="danger"
+            onClick={() => void respond(workspaceId, requestId, false)}
+          >
+            <Icon name="close" size={13} />
+            Reject
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function renderInputHint(input: unknown): string {
   if (input && typeof input === 'object') {
     const rec = input as Record<string, unknown>
@@ -71,7 +154,13 @@ function renderInputHint(input: unknown): string {
   return ''
 }
 
-function ChatItemView({ item }: { item: ChatItem }): JSX.Element | null {
+function ChatItemView({
+  item,
+  workspaceId
+}: {
+  item: ChatItem
+  workspaceId: string
+}): JSX.Element | null {
   if (item.source === 'user') {
     return (
       <div className="max-w-[85%] self-end rounded-2xl rounded-tr-sm bg-accent px-3 py-2 text-sm font-medium text-bg whitespace-pre-wrap">
@@ -79,7 +168,7 @@ function ChatItemView({ item }: { item: ChatItem }): JSX.Element | null {
       </div>
     )
   }
-  return <AgentEventView event={item.event} />
+  return <AgentEventView event={item.event} workspaceId={workspaceId} />
 }
 
 /** Chat-style transcript + prompt input for one workspace. */
@@ -134,7 +223,9 @@ export function AgentChat({ workspace }: { workspace: Workspace }): JSX.Element 
             </p>
           </div>
         ) : (
-          items.map((item) => <ChatItemView key={item.id} item={item} />)
+          items.map((item) => (
+            <ChatItemView key={item.id} item={item} workspaceId={workspace.id} />
+          ))
         )}
       </div>
 

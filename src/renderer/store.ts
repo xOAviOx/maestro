@@ -85,6 +85,9 @@ interface MaestroState {
   workspaces: Workspace[]
   selectedWorkspaceId: string | null
   chats: Record<string, ChatItem[]>
+  /** Outcome of each tool-approval prompt, keyed by requestId. Absent =
+   * still pending (buttons live); present = settled (buttons frozen). */
+  permissionResolutions: Record<string, 'approved' | 'rejected' | 'expired'>
   /** Pending queued jobs across all workspaces (renderer filters by workspace). */
   queue: QueuedJob[]
   /** Latest test result per workspace id (session-only, like chats). */
@@ -153,6 +156,7 @@ interface MaestroState {
   enqueueJob: (workspaceId: string, prompt: string, dependsOnWorkspaceId?: string) => Promise<void>
   cancelJob: (jobId: string) => Promise<void>
   cancelAgent: (workspaceId: string) => Promise<void>
+  respondPermission: (workspaceId: string, requestId: string, approve: boolean) => Promise<void>
   archiveWorkspace: (id: string) => Promise<void>
   clearError: () => void
   pushToast: (kind: Toast['kind'], message: string) => void
@@ -189,6 +193,7 @@ export const useStore = create<MaestroState>((set, get) => ({
   workspaces: [],
   selectedWorkspaceId: null,
   chats: {},
+  permissionResolutions: {},
   queue: [],
   testResults: {},
   testRunning: {},
@@ -459,6 +464,22 @@ export const useStore = create<MaestroState>((set, get) => ({
     }
   },
 
+  respondPermission: async (workspaceId, requestId, approve) => {
+    // Optimistically freeze the buttons; main also broadcasts a
+    // `permission_resolved` that settles it authoritatively.
+    set((s) => ({
+      permissionResolutions: {
+        ...s.permissionResolutions,
+        [requestId]: approve ? 'approved' : 'rejected'
+      }
+    }))
+    try {
+      await ipc.respondPermission(workspaceId, requestId, approve ? 'approve' : 'reject')
+    } catch (err) {
+      get().pushToast('error', errMessage(err))
+    }
+  },
+
   enqueueJob: async (workspaceId, prompt, dependsOnWorkspaceId) => {
     // Show the queued prompt in the transcript so the user sees what they lined up.
     set((s) => ({
@@ -471,7 +492,7 @@ export const useStore = create<MaestroState>((set, get) => ({
       }
     }))
     try {
-      await ipc.enqueueJob({ workspaceId, prompt, dependsOnWorkspaceId })
+      await ipc.enqueueJob({ workspaceId, prompt, dependsOnWorkspaceId, gateApprovals: true })
     } catch (err) {
       get().pushToast('error', errMessage(err))
     }
@@ -672,6 +693,15 @@ export const useStore = create<MaestroState>((set, get) => ({
       // bounded) so the dashboard updates without a re-fetch.
       set((s) => ({
         usageEvents: [evt.usage, ...s.usageEvents].slice(0, USAGE_EVENT_CAP)
+      }))
+      return
+    }
+    // A resolved approval settles an existing request bubble (freeze its
+    // buttons) rather than adding a new line to the transcript.
+    if (evt.event.kind === 'permission_resolved') {
+      const { requestId, decision } = evt.event
+      set((s) => ({
+        permissionResolutions: { ...s.permissionResolutions, [requestId]: decision }
       }))
       return
     }
