@@ -173,6 +173,12 @@ export const ipc = {
     callVoid(window.maestro.startAgent(workspaceId, prompt, model)),
   cancelAgent: (workspaceId: string): Promise<void> =>
     callVoid(window.maestro.cancelAgent(workspaceId)),
+  respondPermission: (
+    workspaceId: string,
+    requestId: string,
+    decision: 'approve' | 'reject'
+  ): Promise<void> =>
+    callVoid(window.maestro.respondPermission(workspaceId, requestId, decision)),
   enqueueJob: (input: EnqueueJobInput): Promise<QueuedJob> =>
     call(window.maestro.enqueueJob(input), QueuedJobSchema),
   listQueue: (): Promise<QueuedJob[]> =>

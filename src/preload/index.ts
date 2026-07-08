@@ -74,6 +74,8 @@ const api: MaestroApi = {
     ipcRenderer.invoke(IpcChannels.agentStart, { workspaceId, prompt, model }),
   cancelAgent: (workspaceId: string) =>
     ipcRenderer.invoke(IpcChannels.agentCancel, { id: workspaceId }),
+  respondPermission: (workspaceId: string, requestId: string, decision: 'approve' | 'reject') =>
+    ipcRenderer.invoke(IpcChannels.agentRespondPermission, { workspaceId, requestId, decision }),
   enqueueJob: (input: EnqueueJobInput) => ipcRenderer.invoke(IpcChannels.agentEnqueue, input),
   listQueue: () => ipcRenderer.invoke(IpcChannels.agentQueueList),
   cancelJob: (jobId: string) => ipcRenderer.invoke(IpcChannels.agentJobCancel, { id: jobId }),
