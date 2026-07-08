@@ -13,6 +13,7 @@ import {
   FanOutInputSchema,
   FileDiffInputSchema,
   MergeWorkspaceInputSchema,
+  PermissionDecisionInputSchema,
   PingRequestSchema,
   RegisterRepoInputSchema,
   RejectTaskInputSchema,
@@ -213,11 +214,16 @@ export function registerIpcHandlers(deps: IpcDeps): void {
   // --- agents ---
   handle(IpcChannels.agentStart, async (raw) => {
     const { workspaceId, prompt, model } = StartAgentInputSchema.parse(raw)
-    await supervisor.startRun(workspaceId, prompt, model)
+    // Chat runs gate their writes/shell behind interactive approval.
+    await supervisor.startRun(workspaceId, prompt, model, true)
   })
   handle(IpcChannels.agentCancel, (raw) => {
     const { id } = WorkspaceIdInputSchema.parse(raw)
     supervisor.cancelRun(id)
+  })
+  handle(IpcChannels.agentRespondPermission, (raw) => {
+    const { workspaceId, requestId, decision } = PermissionDecisionInputSchema.parse(raw)
+    supervisor.resolvePermission(workspaceId, requestId, decision)
   })
   handle(IpcChannels.agentEnqueue, (raw) => {
     const input = EnqueueJobInputSchema.parse(raw)
