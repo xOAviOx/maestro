@@ -1,5 +1,30 @@
 import type { AgentEvent, AgentType } from '@shared/types'
 
+/** A gated tool the agent wants to run, handed to the approval callback. */
+export interface PermissionRequest {
+  /** Tool name as the CLI reports it (e.g. 'Write', 'Edit', 'Bash', 'PowerShell'). */
+  toolName: string
+  /** The tool's input arguments (opaque; shown to the user for context). */
+  input: unknown
+}
+
+/**
+ * The host's decision for a `PermissionRequest`, in the shape Claude Code's
+ * stream-json control protocol expects. `allow` proceeds (optionally with a
+ * revised input); `deny` blocks just that call and lets the turn continue.
+ */
+export type PermissionDecision =
+  | { behavior: 'allow'; updatedInput?: unknown }
+  | { behavior: 'deny'; message?: string }
+
+/**
+ * Ask the host whether a gated tool may run. Provided only for interactive
+ * (chat) runs; when absent the harness never pauses and behaves exactly as
+ * before. Resolving is what un-pauses the agent, so it may take arbitrarily
+ * long (it waits on a human).
+ */
+export type RequestPermission = (req: PermissionRequest) => Promise<PermissionDecision>
+
 /**
  * Options for a single agent turn. The supervisor builds these; the harness
  * translates them into a CLI invocation.
@@ -19,6 +44,12 @@ export interface LaunchOptions {
    * of the inherited process env. Never logged.
    */
   env?: Record<string, string>
+  /**
+   * When set, the harness runs in interactive-approval mode: gated tool calls
+   * (writes / shell) pause and call this before executing. Omit for autonomous
+   * runs — the harness then never pauses (its default, pre-approval behavior).
+   */
+  requestPermission?: RequestPermission
 }
 
 /**
