@@ -256,6 +256,25 @@ export const AgentEventSchema = z.discriminatedUnion('kind', [
     ok: z.boolean(),
     summary: z.string().optional()
   }),
+  // --- interactive tool approval (chat agent gate) --------------------------
+  // Emitted when the agent asks to run a gated tool (writes / shell) and is
+  // PAUSED waiting for the user. The renderer shows Approve/Reject for
+  // `requestId`; the answer travels back via `agentRespondPermission`. Only
+  // produced for gated chat runs (see WorkspaceSupervisor); autonomous
+  // workflow/fan-out runs never gate and so never emit these.
+  z.object({
+    kind: z.literal('permission_request'),
+    requestId: z.string(),
+    toolName: z.string(),
+    input: z.unknown()
+  }),
+  // Settles a prior `permission_request`: the user approved/rejected it, or the
+  // run ended first (`expired`). The renderer uses it to freeze the buttons.
+  z.object({
+    kind: z.literal('permission_resolved'),
+    requestId: z.string(),
+    decision: z.enum(['approved', 'rejected', 'expired'])
+  }),
   z.object({
     kind: z.literal('turn_complete'),
     sessionId: z.string(),
@@ -354,6 +373,9 @@ export const QueuedJobSchema = z.object({
   model: z.string().optional(),
   /** When set, this job waits until that workspace finishes its run. */
   dependsOnWorkspaceId: z.string().nullable(),
+  /** Gate the run's writes/shell behind interactive approval (chat runs). Off
+   * for autonomous work. Optional for back-compat with older in-flight jobs. */
+  gateApprovals: z.boolean().optional(),
   createdAt: z.string()
 })
 export type QueuedJob = z.infer<typeof QueuedJobSchema>
@@ -417,12 +439,26 @@ export const EnqueueJobInputSchema = z.object({
   workspaceId: z.string().min(1),
   prompt: z.string().min(1),
   model: z.string().optional(),
-  dependsOnWorkspaceId: z.string().min(1).optional()
+  dependsOnWorkspaceId: z.string().min(1).optional(),
+  /** Gate the run's writes/shell behind interactive approval. Defaults true so
+   * chat-queued follow-ups match the immediate chat run's behavior. */
+  gateApprovals: z.boolean().optional()
 })
 export type EnqueueJobInput = z.infer<typeof EnqueueJobInputSchema>
 
 export const WorkspaceIdInputSchema = z.object({ id: z.string().min(1) })
 export type WorkspaceIdInput = z.infer<typeof WorkspaceIdInputSchema>
+
+/**
+ * The user's answer to a paused `permission_request`. `requestId` scopes it to
+ * the exact pending tool call so a stale click can't resolve the wrong one.
+ */
+export const PermissionDecisionInputSchema = z.object({
+  workspaceId: z.string().min(1),
+  requestId: z.string().min(1),
+  decision: z.enum(['approve', 'reject'])
+})
+export type PermissionDecisionInput = z.infer<typeof PermissionDecisionInputSchema>
 
 export const ArchiveWorkspaceInputSchema = z.object({
   id: z.string().min(1),
