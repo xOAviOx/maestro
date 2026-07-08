@@ -85,6 +85,7 @@ export const IpcChannels = {
   agentEnqueue: 'maestro:agent:enqueue',
   agentQueueList: 'maestro:agent:queueList',
   agentJobCancel: 'maestro:agent:jobCancel',
+  agentRespondPermission: 'maestro:agent:respondPermission',
   agentIsAvailable: 'maestro:agent:isAvailable',
   agentAuthStatus: 'maestro:agent:authStatus',
   agentLoginStart: 'maestro:agent:loginStart',
@@ -176,6 +177,12 @@ export interface MaestroApi {
    * onWorkspaceEvent. */
   startAgent(workspaceId: string, prompt: string, model?: string): Promise<void>
   cancelAgent(workspaceId: string): Promise<void>
+  /** Answer a paused tool-approval prompt for the chat agent (Approve/Reject). */
+  respondPermission(
+    workspaceId: string,
+    requestId: string,
+    decision: 'approve' | 'reject'
+  ): Promise<void>
   /** Enqueue an agent turn. Runs FIFO when its workspace is free and its
    * dependency (if any) has finished. Returns the created job. */
   enqueueJob(input: EnqueueJobInput): Promise<QueuedJob>
