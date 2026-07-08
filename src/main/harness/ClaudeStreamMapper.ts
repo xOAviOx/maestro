@@ -32,6 +32,15 @@ export class ClaudeStreamMapper {
     return this.mapObject(obj)
   }
 
+  /**
+   * Map an already-parsed NDJSON value (the streaming path parses each line
+   * itself to first peel off control-protocol messages, then forwards the rest
+   * here). Same normalization as `mapLine`, minus the JSON.parse.
+   */
+  mapParsed(obj: unknown): AgentEvent[] {
+    return this.mapObject(obj)
+  }
+
   private mapObject(obj: unknown): AgentEvent[] {
     if (!isRecord(obj)) return []
     switch (obj['type']) {

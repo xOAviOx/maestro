@@ -25,7 +25,13 @@ export function createHarness(type: AgentType, opts?: ClaudeCodeHarnessOptions):
   }
 }
 
-export type { Harness, LaunchOptions } from './Harness'
+export type {
+  Harness,
+  LaunchOptions,
+  PermissionRequest,
+  PermissionDecision,
+  RequestPermission
+} from './Harness'
 export { ClaudeCodeHarness } from './ClaudeCodeHarness'
 export type { ClaudeCodeHarnessOptions, ClaudePermissionMode } from './ClaudeCodeHarness'
 export { CodexHarness } from './CodexHarness'
