@@ -102,13 +102,13 @@ async function main(): Promise<void> {
     page.on('pageerror', (e) => console.error('  page error:', e.message))
 
     await page.goto(url, { waitUntil: 'networkidle' })
-    await page.waitForFunction(() => (window as unknown as { __ready?: boolean }).__ready === true, {
+    await page.waitForFunction(() => (globalThis as unknown as { __ready?: boolean }).__ready === true, {
       timeout: 30_000
     })
 
     for (const shot of shots) {
       await page.evaluate(async (scene) => {
-        const scenes = (window as unknown as { __scenes: Record<string, () => Promise<void>> }).__scenes
+        const scenes = (globalThis as unknown as { __scenes: Record<string, () => Promise<void>> }).__scenes
         const fn = scenes[scene]
         if (!fn) throw new Error(`no scene: ${scene}`)
         await fn()
