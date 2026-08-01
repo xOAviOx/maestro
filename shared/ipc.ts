@@ -267,3 +267,4 @@ export interface MaestroApi {
   /** Subscribe to workspace push events. Returns an unsubscribe function. */
   onWorkspaceEvent(listener: (evt: WorkspacePushEvent) => void): () => void
 }
+//
